@@ -1,0 +1,13 @@
+numpy
+scipy
+scikit-learn
+pyyaml
+requests
+ijson
+tqdm
+huggingface-hub
+openai
+anthropic
+gradio
+pytest
+ruff

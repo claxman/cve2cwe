@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cve2cwe"
+version = "0.0.1"
+description = "Label a CVE description with its CWE weakness type."
+requires-python = "==3.12.*"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Chaitanya Laxman" }]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Guard commits: enforce noreply identity, cap file size, block common secrets.
+set -euo pipefail
+
+noreply_suffix="@users.noreply.github.com"
+
+extract_email() { sed -n 's/.*<\([^>]*\)>.*/\1/p'; }
+
+author_email="$(git var GIT_AUTHOR_IDENT | extract_email)"
+committer_email="$(git var GIT_COMMITTER_IDENT | extract_email)"
+
+case "$author_email" in
+    *"$noreply_suffix") : ;;
+    *)
+        echo "pre-commit: author email '$author_email' is not a GitHub noreply address" >&2
+        exit 1
+        ;;
+esac
+case "$committer_email" in
+    *"$noreply_suffix") : ;;
+    *)
+        echo "pre-commit: committer email '$committer_email' is not a GitHub noreply address" >&2
+        exit 1
+        ;;
+esac
+
+max_bytes=$((20 * 1024 * 1024))
+while IFS= read -r -d '' path; do
+    [ -z "$path" ] && continue
+    size="$(git cat-file -s ":$path" 2>/dev/null || echo 0)"
+    if [ "$size" -gt "$max_bytes" ]; then
+        echo "pre-commit: $path is $size bytes, over 20 MB limit" >&2
+        exit 1
+    fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+# Patterns are the prefix plus a run of key characters, so this file and docs
+# that only quote the regex do not trigger a match.
+patterns=(
+    'sk-ant-[A-Za-z0-9_-]{20,}'
+    'hf_[A-Za-z0-9]{30,}'
+    'ghp_[A-Za-z0-9]{30,}'
+    'github_pat_[A-Za-z0-9_]{30,}'
+    'AKIA[0-9A-Z]{16}'
+    'WANDB_API_KEY=[A-Za-z0-9_-]{20,}'
+    '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+)
+
+added_lines="$(git --no-pager diff --cached --no-color -U0 \
+    | grep -E '^\+' \
+    | grep -Ev '^\+\+\+' || true)"
+
+if [ -n "$added_lines" ]; then
+    for pat in "${patterns[@]}"; do
+        if printf '%s\n' "$added_lines" | grep -Eq -e "$pat"; then
+            echo "pre-commit: staged diff matches secret pattern: $pat" >&2
+            exit 1
+        fi
+    done
+fi
+
+exit 0
