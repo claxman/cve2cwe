@@ -25,7 +25,12 @@ def main(argv: list[str] | None = None) -> int:
             "usage: python -m cve2cwe <stage>\nstages: " + " ".join(STAGES) + "\n"
         )
         return 1
-    sys.stdout.write(f"{argv[0]}: not built yet\n")
+    stage = argv[0]
+    if stage == "data":
+        from cve2cwe import data
+
+        return data.main()
+    sys.stdout.write(f"{stage}: not built yet\n")
     return 1
 
 

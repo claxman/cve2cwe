@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Reject commit messages that carry an AI-attribution trailer. The main fix
+# lives in ~/.cursor/cli-config.json (attribution.attributeCommitsToAgent);
+# this hook is defense in depth.
+set -euo pipefail
+
+msg_file="$1"
+
+# Patterns to reject. Add more if other tools inject trailers in the future.
+patterns=(
+    'Co-authored-by:[[:space:]]*Cursor[[:space:]]*<cursoragent@cursor.com>'
+    'Co-authored-by:[[:space:]]*Claude[[:space:]]*<[^>]*anthropic[^>]*>'
+    'Co-authored-by:[[:space:]]*GitHub[[:space:]]*Copilot'
+    'Co-authored-by:[[:space:]]*Codex'
+    'Co-authored-by:[[:space:]]*Devin'
+    'Co-authored-by:[[:space:]]*Aider'
+    'Generated-by:[[:space:]]*Cursor'
+    'Generated-by:[[:space:]]*Claude'
+)
+
+for pat in "${patterns[@]}"; do
+    if grep -Eqi -e "$pat" -- "$msg_file"; then
+        echo "commit-msg: rejecting commit; message carries an AI-attribution trailer matching: $pat" >&2
+        echo "Turn off cursor-cli's attribution.attributeCommitsToAgent in ~/.cursor/cli-config.json." >&2
+        exit 1
+    fi
+done
+
+exit 0

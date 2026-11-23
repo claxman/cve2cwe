@@ -1,0 +1,80 @@
+{
+  "source": "official",
+  "git_commit": "a0559ccc4d9e159beec252f02639c8f334782287",
+  "config_sha256": "47023edd13eb501d770a8f490c7a2787d90e6fa8144f90a44dd238e8f98f6df0",
+  "package_versions": {
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "ijson": "3.6.0",
+    "requests": "2.34.2",
+    "pyyaml": "6.0.4"
+  },
+  "created_utc": "2026-11-23T21:25:07Z",
+  "finished_utc": "2026-11-23T21:25:31Z",
+  "raw": {
+    "CVE-2021": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2021.json.gz",
+      "bytes": 16873023,
+      "sha256": "baf3d8221614101df4120aa9e7c8668e0a542ce782e424eee961e159f51c2a65",
+      "downloaded_utc": "2026-11-23T21:23:34Z"
+    },
+    "CVE-2022": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2022.json.gz",
+      "bytes": 18468249,
+      "sha256": "fd86bf6a18eefef2fc354b9704c640110beae553afe8684131beae153dd528e5",
+      "downloaded_utc": "2026-11-23T21:23:37Z"
+    },
+    "CVE-2023": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2023.json.gz",
+      "bytes": 20330557,
+      "sha256": "ee03ed56269278b44b0718bb8aeba2347a1d8237a190872b61f5904e8f43d54f",
+      "downloaded_utc": "2026-11-23T21:23:39Z"
+    },
+    "CVE-2024": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2024.json.gz",
+      "bytes": 25176929,
+      "sha256": "5afb0a9d93b30a9805348ed0206fd4da00b0cab0d226891b4a45384f8d9ce514",
+      "downloaded_utc": "2026-11-23T21:23:43Z"
+    },
+    "CVE-2025": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2025.json.gz",
+      "bytes": 25916687,
+      "sha256": "2b175b69c0eac454b5b7ed5e8a9adf0a7ce3aa13b3bb40110c205010bd2baf1f",
+      "downloaded_utc": "2026-11-23T21:23:46Z"
+    },
+    "CVE-2026": {
+      "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2026.json.gz",
+      "bytes": 48456520,
+      "sha256": "eb727a9da5a19b55a313bc8312f6dcbdd6d3ddfc35d2174b4bff330fcad2be32",
+      "downloaded_utc": "2026-11-23T21:23:49Z"
+    }
+  },
+  "cwe_catalogue": {
+    "url": "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip",
+    "bytes": 2119263,
+    "sha256": "bcda44c9abf61ff977f50c3c6649eea5a97a7b0626b0396c2c3ec4bfb973a3dc",
+    "downloaded_utc": "2026-11-23T21:24:23Z"
+  },
+  "processed": {
+    "train.jsonl.gz": {
+      "sha256": "354c3aeb9ce96263a5ccac48ea0b5f1692dbacb9e24c051e4357a3a7d384bd61",
+      "rows": 42291
+    },
+    "dev.jsonl": {
+      "sha256": "070d80110428c60e81ee5902481020225034eb09bac074ad167a97df7ae2cd4d",
+      "rows": 2759
+    },
+    "test.jsonl": {
+      "sha256": "0aeb5d74b9b072bb9b96dfbee198be452c94798f2908421426b629c5961d3481",
+      "rows": 2266
+    },
+    "labels.json": {
+      "sha256": "a799b3a19d870c43a3c4fe40c296ada1c3837678bb6e3caad779553ac5e599aa",
+      "rows": 53
+    },
+    "stats.json": {
+      "sha256": "618d9a76040247c13d2af06d4de2ede1b8e5635d0052f67342178052fba8eb57"
+    }
+  }
+}

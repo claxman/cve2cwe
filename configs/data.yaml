@@ -1,0 +1,44 @@
+# Dataset build parameters. The data stage reads only this file for tunables.
+
+# Years of NVD JSON 2.0 yearly feeds to fetch.
+years: [2021, 2022, 2023, 2024, 2025, 2026]
+
+# Sources. The official feed is tried first for every year. If any year fails
+# (status not 200, or not a valid gzip), the mirror is used for all years.
+official_url: "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-{year}.json.gz"
+mirror_url: "https://github.com/fkie-cad/nvd-json-data-feeds/releases/latest/download/CVE-{year}.json.xz"
+
+# CWE catalogue download for label names (MITRE).
+cwe_download_url: "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
+
+# Source identifiers from the NVD JSON 2.0 schema.
+nvd_source: "nvd@nist.gov"
+adp_source: "134c704f-9b21-4f2e-91b3-4a467353bcc0"
+kernel_source: "416baaa9-dc9f-4396-8d5f-8c081fb06d67"
+
+# Rule 1: keep records published on or after this date.
+earliest_published: "2021-01-01"
+
+# Rule 2: NVD analyst labels that mean "no usable label".
+placeholder_labels: ["NVD-CWE-Other", "NVD-CWE-noinfo"]
+
+# Rule 3: three-way date split on the first 10 characters of published.
+# train:  published < train_end
+# dev:    train_end <= published < test_start
+# test:   published >= test_start
+train_end: "2025-10-01"
+test_start: "2026-04-15"
+
+# Rule 4: only keep CWEs that have at least this many records in the train
+# window after rule 2.
+min_train_class_count: 200
+
+# Rule 6: cap per class in train at the most recent N records.
+train_per_class_cap: 3000
+
+# Near-duplicate report thresholds (TF-IDF cosine).
+near_duplicate_thresholds: [0.8, 0.9]
+
+# Filesystem layout.
+raw_dir: "data/raw"
+processed_dir: "data/processed"

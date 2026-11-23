@@ -102,6 +102,7 @@ In src/cve2cwe/leakage.py, called by the data stage and by the tests:
 - zero normalised-text overlap between any two splits
 - every label is in labels.json and none is a placeholder
 - sha256 of test.jsonl equals the manifest. This is the lock: the test fails if test.jsonl changes.
+- The lock is enforced on write. After a successful first build, the data stage never overwrites test.jsonl with different content. If a rebuild would change it, the stage exits with an error unless RELOCK=1 is set in the environment.
 
 ### 4.5 Dataset card and notice
 
@@ -294,4 +295,4 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 
 ## Change log
 
-No changes yet.
+- 2026-11-24: Section 4.4 now says the lock is enforced on write. After the first successful build, the data stage refuses to overwrite data/processed/test.jsonl with different content unless RELOCK=1 is set.

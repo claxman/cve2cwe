@@ -26,8 +26,12 @@ def test_dispatcher_lists_every_stage() -> None:
         assert stage in usage, f"stage {stage} missing from usage output"
 
 
-def test_each_stage_runs_and_reports_not_built() -> None:
+def test_each_unbuilt_stage_reports_not_built() -> None:
+    # Stages implemented so far; skip them here (they have their own tests).
+    built = {"data"}
     for stage in STAGES:
+        if stage in built:
+            continue
         result = subprocess.run(
             [sys.executable, "-m", "cve2cwe", stage],
             capture_output=True,
