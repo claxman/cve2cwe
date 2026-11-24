@@ -89,7 +89,7 @@ Why these choices:
   - per split, for cna_cwes and for adp_cwes: share of records where the list is not empty, and share of those where it equals [label]
   - a coverage table over all non-rejected records before rule 2, for each publication year 2021 to 2026 and for the test window: records, share with an NVD analyst CWE that is not a placeholder, share with a CNA CWE, share with a CISA ADP CWE, share with none of the three, and the share of that last group with is_kernel true
   - share of test records whose nearest train record has TF-IDF cosine similarity of 0.8 or more, and 0.9 or more
-- MANIFEST.json: for each raw file the url, UTC download time, bytes and sha256. For each processed file the sha256 and row count. Also the git commit, a hash of configs/data.yaml and the creation time.
+- MANIFEST.json: for each raw file the url, UTC download time, bytes and sha256. For each processed file the sha256 and row count. Also the git commit, a git_dirty flag (true if the working tree had uncommitted changes when the run started), a hash of configs/data.yaml and the creation time.
 
 The build is deterministic: a second run on the same raw files produces byte-identical train, dev and test files.
 
@@ -245,6 +245,7 @@ Create exactly these, no more.
   - the author or committer email, read with `git var`, does not end in @users.noreply.github.com
   - any staged file is larger than 20 MB
   - the staged diff matches a key pattern. Each pattern needs the prefix plus a run of key characters, so that this file and the hook itself do not trigger it: `sk-ant-[A-Za-z0-9_-]{20,}`, `hf_[A-Za-z0-9]{30,}`, `ghp_[A-Za-z0-9]{30,}`, `github_pat_[A-Za-z0-9_]{30,}`, `AKIA[0-9A-Z]{16}`, `WANDB_API_KEY=[A-Za-z0-9_-]{20,}`, or a line that begins a PRIVATE KEY block
+- .githooks/commit-msg (executable). Reject any commit whose message carries an AI co-author or generated-by trailer (for example `Co-authored-by: Cursor <cursoragent@cursor.com>`). Policy: commits carry one author, the person accountable for them; agent use is disclosed in README.md and AGENTS.md, not in the commit trailer.
 - .gitignore: .venv*, .env, data/raw/, checkpoints/, wandb/, *.safetensors, *.gguf, __pycache__/, .pytest_cache/, .ruff_cache/, .DS_Store, *.egg-info/.
 - .cursorignore: .env and .env.* but not .env.example, so a coding agent cannot read keys.
 - .env.example: variable names only (WANDB_API_KEY, HF_TOKEN, ANTHROPIC_API_KEY), no values.
@@ -290,9 +291,12 @@ outputs/        raw predictions per system, split and run
 results/        metrics, per-class tables, gate, serving, routing, spend
 docs/           DESIGN.md  ACCEPTANCE.md
 tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
-.githooks/pre-commit   .github/workflows/tests.yml
+.githooks/pre-commit  .githooks/commit-msg   .github/workflows/tests.yml
 ```
 
 ## Change log
 
 - 2026-11-24: Section 4.4 now says the lock is enforced on write. After the first successful build, the data stage refuses to overwrite data/processed/test.jsonl with different content unless RELOCK=1 is set.
+- 2026-11-24: Added .githooks/commit-msg to reject any commit whose message carries an AI co-author or generated-by trailer. Appendix A and Appendix B updated accordingly. Policy: one author per commit, the person accountable for it; agent use is disclosed in README.md and AGENTS.md, not in the trailer.
+- 2026-11-24: Section 4.3 now records a git_dirty flag in MANIFEST.json alongside git_commit. The flag is read at the start of the run, so it reflects the working tree before the data stage writes anything.
+- 2026-11-24: The first two commits (design and skeleton) were rewritten once, before any results existed, to drop an automatic Co-authored-by trailer. File contents were not changed. History is not rewritten after this point.

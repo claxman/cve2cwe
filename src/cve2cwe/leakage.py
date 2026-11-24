@@ -94,12 +94,21 @@ def check_no_normalised_overlap(
             )
 
 
-def check_labels(records: list[dict], labels: list[dict]) -> None:
+def check_labels(
+    records: list[dict], labels: list[dict], cfg: dict[str, Any] | None = None
+) -> None:
+    if cfg is None:
+        with (Path(__file__).resolve().parents[2] / "configs" / "data.yaml").open() as f:
+            import yaml
+
+            cfg = yaml.safe_load(f)
+    placeholders = set(cfg.get("placeholder_labels", []))
     ids = {lbl["id"] for lbl in labels}
-    placeholders = {"NVD-CWE-Other", "NVD-CWE-noinfo"}
     if ids & placeholders:
         raise LeakageError(f"labels contain placeholders: {ids & placeholders}")
     for r in records:
+        if r["label"] in placeholders:
+            raise LeakageError(f"record {r['cve_id']} carries placeholder label {r['label']}")
         if r["label"] not in ids:
             raise LeakageError(f"record {r['cve_id']} label {r['label']} not in labels.json")
 
@@ -132,6 +141,6 @@ def run_all(
     check_no_id_overlap(train, dev, test)
     check_date_boundaries(train, dev, test, cfg)
     check_no_normalised_overlap(train, dev, test)
-    check_labels(train + dev + test, labels)
+    check_labels(train + dev + test, labels, cfg)
     check_lock(test_path, manifest)
     print("[leakage] all checks passed")

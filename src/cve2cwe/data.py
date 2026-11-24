@@ -32,6 +32,48 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "configs" / "data.yaml"
 
+# Canonical funnel order (pipeline order, not alphabetical). Used by the stdout
+# log and the dataset card so the funnel always reads top to bottom.
+FUNNEL_ORDER: tuple[str, ...] = (
+    "rule_1_input",
+    "rule_1_dropped_rejected",
+    "rule_1_dropped_no_english",
+    "rule_1_dropped_no_date",
+    "rule_1_dropped_before_cutoff",
+    "rule_1_kept",
+    "rule_2_dropped_no_label",
+    "rule_2_dropped_placeholder",
+    "rule_2_dropped_multi_label",
+    "rule_2_kept",
+    "rule_3_split_train",
+    "rule_3_split_dev",
+    "rule_3_split_test",
+    "label_set_size",
+    "rule_4_train_kept",
+    "rule_4_dev_kept",
+    "rule_4_test_kept",
+    "rule_5_dev_dropped_equals_test",
+    "rule_5_train_dropped_equals_dev_or_test",
+    "rule_5_train_within_dropped",
+    "rule_5_train_conflicting_labels",
+    "rule_6_train_dropped",
+    "final_train",
+    "final_dev",
+    "final_test",
+)
+
+
+def _ordered_funnel(funnel: dict) -> dict:
+    """Return funnel in the canonical pipeline order; append unknown keys at the end."""
+    out: dict = {}
+    for k in FUNNEL_ORDER:
+        if k in funnel:
+            out[k] = funnel[k]
+    for k in funnel:
+        if k not in out:
+            out[k] = funnel[k]
+    return out
+
 # ---------------------------------------------------------------------------
 # Config and small helpers.
 
@@ -71,6 +113,19 @@ def _git_commit() -> str:
         return out.decode().strip()
     except Exception:
         return ""
+
+
+def _git_dirty() -> bool:
+    """True if the working tree has uncommitted changes at the time of the call."""
+    try:
+        import subprocess
+
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=REPO_ROOT, stderr=subprocess.DEVNULL
+        )
+        return bool(out.strip())
+    except Exception:
+        return False
 
 
 def _package_versions() -> dict[str, str]:
@@ -753,18 +808,27 @@ def _agreement_table_md(stats: dict) -> str:
 
 
 def _funnel_block_md(stats: dict) -> str:
-    funnel = stats["funnel"]
+    funnel = _ordered_funnel(stats["funnel"])
     lines = ["| step | count |", "|---|---:|"]
-    for k in sorted(funnel):
-        lines.append(f"| {k} | {funnel[k]} |")
+    for k, v in funnel.items():
+        lines.append(f"| {k} | {v} |")
     return "\n".join(lines)
+
+
+def _format_threshold(key: str) -> str:
+    # Keys look like "share_ge_0_80" meaning threshold 0.80. Render as "0.80".
+    body = key.removeprefix("share_ge_").replace("_", ".")
+    try:
+        return f"{float(body):.2f}"
+    except ValueError:
+        return key
 
 
 def _near_dup_block_md(stats: dict) -> str:
     nd = stats["near_duplicate_test_to_train"]
     lines = ["| threshold | share |", "|---|---:|"]
     for k, v in nd.items():
-        lines.append(f"| {k} | {v:.4f} |")
+        lines.append(f"| {_format_threshold(k)} | {v:.4f} |")
     return "\n".join(lines)
 
 
@@ -864,6 +928,10 @@ def main() -> int:
     processed.mkdir(parents=True, exist_ok=True)
 
     start_utc = _utc_now_iso()
+    # Read git state at the start of the run so git_dirty reflects the tree
+    # before this run writes anything, not after.
+    git_commit = _git_commit()
+    git_dirty = _git_dirty()
 
     # 1. Fetch.
     source, raw_paths = fetch_raw(cfg)
@@ -916,8 +984,8 @@ def main() -> int:
 
     # Print funnel.
     print("\n=== funnel ===")
-    for k in sorted(funnel):
-        print(f"{k}: {funnel[k]}")
+    for k, v in _ordered_funnel(funnel).items():
+        print(f"{k}: {v}")
     print("rule_4_coverage:", coverage_rule_4)
     print()
 
@@ -956,7 +1024,7 @@ def main() -> int:
 
     # 12. Stats.
     stats: dict[str, Any] = {
-        "funnel": dict(funnel),
+        "funnel": _ordered_funnel(funnel),
         "rule_4_coverage": coverage_rule_4,
         "splits": {
             "train": _split_stats(train),
@@ -972,7 +1040,8 @@ def main() -> int:
     # 13. Manifest.
     manifest: dict[str, Any] = {
         "source": source,
-        "git_commit": _git_commit(),
+        "git_commit": git_commit,
+        "git_dirty": git_dirty,
         "config_sha256": _config_hash(),
         "package_versions": _package_versions(),
         "created_utc": start_utc,
