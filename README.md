@@ -39,7 +39,7 @@ Everything below is the evidence. Every measured number in this file is generate
 
 A CWE label on a CVE says what kind of weakness it is. Exposure management tools use it to group findings, suggest fixes and report.
 
-NVD analysts used to add this label as routine. On 15 April 2026 NIST limited that work to a priority subset of CVEs ([NIST notice](https://www.nist.gov/news-events/news/2026/04/nist-updates-nvd-operations-address-record-cve-growth)). Many new CVEs now arrive without an analyst label.
+NVD analysts used to add this label as routine. On 15 April 2026 NIST limited that work to a priority subset of CVEs ([NIST notice](https://www.nist.gov/news-events/news/2026/04/nist-updates-nvd-operations-address-record-cve-growth)). Many new CVEs now arrive without an analyst label. Coverage had been falling since 2023, as the table shows.
 
 <!-- BEGIN facts:coverage -->
 | Publication year | Records | NVD analyst CWE |
@@ -396,7 +396,7 @@ GPU H100 SXM 80 GB: 8.360 hours, $37.0. Share of billed hours with no recorded r
 
 Claude total $19.5. GPU plus Claude: $56.4.
 
-Provider dashboards, read by the reviewer on 2026-11-24.
+Provider dashboards, read on 2026-11-24.
 
 RunPod, read 2026-11-24T17:21Z: spent $40.17 (loaded $80.00 minus balance $39.83), next to $40.13 for uptime 9h 5m at $4.418 per hour.
 
