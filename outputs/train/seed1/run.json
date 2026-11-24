@@ -1,0 +1,172 @@
+{
+  "stage": "train",
+  "mode": "full",
+  "seed": 1,
+  "started_utc": "2026-11-24T10:12:19Z",
+  "git_commit": "225b6dd351d559f25c9f5ac1866e90eda72eccbc",
+  "git_dirty": false,
+  "package_versions": {
+    "torch": "2.14.1+cu130",
+    "transformers": "5.17.0",
+    "trl": "1.15.0",
+    "peft": "0.22.0",
+    "accelerate": "1.16.0",
+    "unsloth": "2026.11.10",
+    "unsloth_zoo": "2026.11.10",
+    "bitsandbytes": "0.50.2",
+    "wandb": "0.31.2",
+    "datasets": "4.8.5"
+  },
+  "full_config": {
+    "base_model": "Qwen/Qwen3.5-4B",
+    "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+    "hub_created_at": "2026-02-27T14:45:03+00:00",
+    "hub_last_modified": "2026-03-02T00:52:52+00:00",
+    "hub_license": "apache-2.0",
+    "load_in_4bit": false,
+    "load_in_16bit": true,
+    "lora": {
+      "r": 16,
+      "alpha": 16,
+      "dropout": 0,
+      "bias": "none",
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ],
+      "use_gradient_checkpointing": "unsloth"
+    },
+    "max_seq_length": 1600,
+    "optim": {
+      "learning_rate": 0.0002,
+      "warmup_ratio": 0.05,
+      "lr_scheduler_type": "cosine",
+      "weight_decay": 0.0,
+      "optimizer": "adamw_torch_fused"
+    },
+    "batch": {
+      "per_device_train_batch_size": 32,
+      "per_device_eval_batch_size": 32,
+      "gradient_accumulation_steps": 1
+    },
+    "loss_mask": {
+      "instruction_part": "<|im_start|>user\n",
+      "response_part": "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    },
+    "dev_eval": {
+      "sample_size": 500,
+      "sample_seed": 1234,
+      "eval_steps": 200
+    },
+    "logging_steps": 10,
+    "num_train_epochs": 1,
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "wandb": {
+      "project": "cve2cwe",
+      "entity": null
+    },
+    "probe": {
+      "seed": 42,
+      "train_rows": 3200,
+      "max_steps": 100,
+      "logging_steps": 10,
+      "output_dir": "/workspace/checkpoints/probe"
+    },
+    "smoke": {
+      "train_rows": 300,
+      "max_steps": 60,
+      "seed": 1,
+      "logging_steps": 1,
+      "run_name": "smoke",
+      "output_dir": "/workspace/checkpoints/smoke",
+      "merged_dir": "/workspace/checkpoints/smoke-merged"
+    }
+  },
+  "systems": {
+    "max_description_chars": 2000
+  },
+  "prompts": {
+    "candidate": {
+      "system": "You label CVE records. Given a CVE description, answer with the one CWE id an NVD analyst would assign, for example CWE-79. Answer with the id only.",
+      "user_template": "CVE description:\n{description}\n\nAnswer with one CWE id.\n"
+    }
+  },
+  "status": "ok",
+  "finished_utc": "2026-11-24T10:23:15Z",
+  "wall_seconds": 655.97,
+  "training_seconds": 569.91,
+  "tokens_per_second": 13153.49,
+  "peak_gpu_memory_bytes": 18925098496,
+  "peak_gpu_memory_gib": 17.63,
+  "final_train_loss": 0.10267056226730346,
+  "first_train_loss": 0.4927248001098633,
+  "dev_losses": [
+    {
+      "step": 200,
+      "loss": 0.09661581367254257
+    },
+    {
+      "step": 400,
+      "loss": 0.08124464750289917
+    },
+    {
+      "step": 600,
+      "loss": 0.07410155236721039
+    },
+    {
+      "step": 800,
+      "loss": 0.06325750797986984
+    },
+    {
+      "step": 1000,
+      "loss": 0.05934305489063263
+    },
+    {
+      "step": 1200,
+      "loss": 0.05957091599702835
+    },
+    {
+      "step": 1322,
+      "loss": 0.0598151795566082
+    }
+  ],
+  "lengths": {
+    "train": {
+      "count": 42291,
+      "p50": 134,
+      "p90": 236,
+      "p99": 1103,
+      "max": 1543,
+      "total": 7493938
+    },
+    "dev": {
+      "count": 2759,
+      "p50": 154,
+      "p90": 385,
+      "p99": 1170,
+      "max": 1495,
+      "total": 613499
+    }
+  },
+  "effective_batch": 32,
+  "steps_completed": 1322,
+  "epoch_adapter_dirs": [
+    "/workspace/checkpoints/seed1/epoch1"
+  ],
+  "final_adapter_dir": "/workspace/checkpoints/seed1/final",
+  "wandb": {
+    "project": "cve2cwe",
+    "run_name": "seed1",
+    "run_id": "6yxmwrhd",
+    "run_url": "https://forge.coreweave.com/wandb/chaitanyalaxman118-chaitanya-personal/cve2cwe/runs/6yxmwrhd"
+  }
+}
