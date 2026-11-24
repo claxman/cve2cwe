@@ -11,14 +11,13 @@ import argparse
 import hashlib
 import json
 import re
-import subprocess
 import sys
 from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 
+from cve2cwe import runinfo
 from cve2cwe.prompts import REPO_ROOT, load_systems_cfg
 
 # DESIGN section 5: strict parser. Nothing else, no fallbacks.
@@ -312,51 +311,6 @@ def _aligned_predictions(preds: list[dict], split_rows: list[dict]) -> list[dict
     return [by_id[r["cve_id"]] for r in split_rows]
 
 
-def _git_commit() -> str:
-    try:
-        r = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return r.stdout.strip() or ""
-    except FileNotFoundError:
-        return ""
-
-
-def _git_dirty() -> bool:
-    try:
-        r = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return bool(r.stdout.strip())
-    except FileNotFoundError:
-        return False
-
-
-def _package_versions() -> dict:
-    import importlib.metadata as md
-
-    want = ["numpy", "scipy", "scikit-learn", "pyyaml"]
-    out: dict = {}
-    for name in want:
-        try:
-            out[name] = md.version(name)
-        except md.PackageNotFoundError:
-            out[name] = None
-    return out
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _scoring_cfg() -> dict:
     cfg = load_systems_cfg()["scoring"]
     return {
@@ -367,12 +321,18 @@ def _scoring_cfg() -> dict:
 
 
 def score_prediction_dir(
-    pred_dir: Path, results_root: Path | None = None
+    pred_dir: Path,
+    results_root: Path | None = None,
+    info: runinfo.RunInfo | None = None,
 ) -> dict:
     """Score one prediction directory and write
     ``results/<system>/<split>/<run_id>.json``. Return the summary dict.
+
+    ``info`` is the process-level RunInfo snapshot captured at startup. If
+    not given, one is captured here (standalone CLI entry).
     """
-    start = _now_iso()
+    info = info or runinfo.capture()
+    start = info.started_utc
     run, preds = _load_prediction_dir(pred_dir)
     system = run["system"]
     split = run["split"]
@@ -388,7 +348,7 @@ def score_prediction_dir(
     correct_vec = metrics.pop("_correct_vector")
     lo, hi = bootstrap_accuracy_ci(correct_vec, cfg["bootstrap_resamples"], cfg["bootstrap_seed"])
     metrics["accuracy_ci95"] = [lo, hi]
-    end = _now_iso()
+    end = runinfo.now_iso()
 
     out = {
         "system": system,
@@ -400,9 +360,9 @@ def score_prediction_dir(
             else str(pred_dir)
         ),
         "scoring": cfg,
-        "git_commit": _git_commit(),
-        "git_dirty": _git_dirty(),
-        "package_versions": _package_versions(),
+        "git_commit": info.git_commit,
+        "git_dirty": info.git_dirty,
+        "package_versions": info.package_versions,
         "start": start,
         "end": end,
         "metrics": metrics,
@@ -422,11 +382,13 @@ def score_paired(
     pred_dir_a: Path,
     pred_dir_b: Path,
     results_root: Path | None = None,
+    info: runinfo.RunInfo | None = None,
 ) -> dict:
     """Paired bootstrap of accuracy_a - accuracy_b on the same split.
 
     Writes ``results/paired/<split>/<a>__minus__<b>.json``.
     """
+    info = info or runinfo.capture()
     run_a, preds_a = _load_prediction_dir(pred_dir_a)
     run_b, preds_b = _load_prediction_dir(pred_dir_b)
     if run_a["split"] != run_b["split"]:
@@ -470,10 +432,10 @@ def score_paired(
         "diff_accuracy": float(correct_a.mean() - correct_b.mean()),
         "diff_accuracy_ci95": [lo, hi],
         "scoring": cfg,
-        "git_commit": _git_commit(),
-        "git_dirty": _git_dirty(),
-        "package_versions": _package_versions(),
-        "finished_utc": _now_iso(),
+        "git_commit": info.git_commit,
+        "git_dirty": info.git_dirty,
+        "package_versions": info.package_versions,
+        "finished_utc": runinfo.now_iso(),
     }
     out_root = results_root or (REPO_ROOT / "results")
     out_dir = out_root / "paired" / split

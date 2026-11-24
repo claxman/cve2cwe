@@ -158,7 +158,8 @@ Champion: the system other than the candidate with the highest accuracy on the l
 - The adapter is merged into the base weights and saved as a standalone bf16 checkpoint.
 - Served with vLLM. Every LLM evaluation, base and fine-tuned, goes through the same OpenAI-compatible client, so the evaluated artifact is the one that would ship.
 - Requests: thinking disabled through the chat template, temperature 0, at most 8 new tokens, logprobs on.
-- Serving context length: 4,096 tokens. The 2,000-character input cut keeps every rendered prompt well under this. A request that would still exceed the server's context (or fails for any other reason) is recorded as invalid output in the prediction file; it is not silently truncated and it does not crash the evaluation run.
+- Serving context length: 8,192 tokens. The candidate prompt is short, but the baseline prompts carry the full label list and up to 5 retrieval examples of 600 characters each; 8,192 fits them with headroom. The value lives in configs/serve.yaml and is passed to vLLM as `--max-model-len`.
+- A request that would still exceed the server's context is recorded as invalid output in the prediction file; it is not silently truncated and it does not crash the evaluation run. Any other error is retried three times with backoff; if it still fails the run exits non-zero and no predictions.jsonl is written (the file is renamed in from a temporary name only at the end of a clean run).
 - Confidence of a prediction: the product of the token probabilities of the generated label.
 - Benchmark on a fixed sample of dev prompts at stated concurrency levels: p50 and p95 latency, records per second, the GPU, its hourly price with the date, cost per 1,000 records at full utilisation, and the monthly volume at which an always-on GPU costs the same as each Claude model.
 - Spend ledger in results/: GPU hours by purpose, API spend from recorded token usage, both checked against the provider dashboards.
@@ -181,6 +182,8 @@ Order of operations at Step 9:
 2. The champion is named, the must-pass set is written to data/processed/must_pass.json with its sha256, and docs/ACCEPTANCE.md plus configs/gate.yaml are committed.
 3. Only then do the three fine-tuned checkpoints run on test.
 4. gate.py reads prediction files only and prints PROMOTE or REJECT with every number it used.
+
+Guard (enforced by llm_eval.py): an LLM run whose system name starts with `candidate_` is refused on the test split unless `docs/ACCEPTANCE.md` contains a line "Status: final", `configs/gate.yaml` exists, and both are committed and unmodified. Baseline systems (`qwen35_4b_zero_shot`, `qwen35_4b_few_shot`, `qwen35_4b_retrieval`, Claude systems) are not subject to this guard.
 
 ## 10. Confidence routing
 
@@ -278,12 +281,16 @@ src/cve2cwe/
   __main__.py   command dispatcher, one entry per stage
   data.py       fetch, clean, dedup, split, manifest, stats, dataset card
   leakage.py    split and lock checks
+  runinfo.py    one shared snapshot of git commit, dirty flag (any modified
+                or untracked file outside outputs/ and results/), package
+                versions and UTC time; captured once per process and reused
+                by baselines, scorer, llm_eval and merge
   scorer.py     strict parser, metrics, bootstrap
   baselines.py  majority, keyword rules, TF-IDF linear
-  prompts.py    shared chat-message builder: cuts the description to
-                configs/systems.yaml max_description_chars, formats the
-                candidate prompt, applies the chat template; used by both
-                train.py and llm_eval.py
+  prompts.py    shared chat-message builder: one build_messages for every
+                LLM system (candidate, zero_shot, few_shot, retrieval); cuts
+                the description to configs/systems.yaml max_description_chars
+                and applies the chat template; used by train.py and llm_eval
   llm_eval.py   prompts and client for any OpenAI-compatible endpoint
   frontier.py   Claude reference runs
   train.py      Unsloth LoRA fine-tune
@@ -317,3 +324,8 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: Training (Step 8) started before Steps 6 and 7 to use GPU time while the CPU baselines are built. Training reads train.jsonl.gz and the dev sample only; test.jsonl is not opened at this point.
 - 2026-11-24: Added a 2-epoch training set alongside the 1-epoch set. Section 7 epochs bullet updated. configs/train.yaml now has a `run_tag` key: with a tag the W&B run name, the checkpoints folder and the outputs/train folder are `<tag>-seed<N>`; with no tag they stay `seed<N>` so the 1-epoch set keeps its names. scripts/pod_train_seeds.sh now refuses to start while any `cve2cwe-*` tmux session exists (the launcher re-points the train venv). All three clean checks (pod.sh train-seeds, the frozen-tree check, train.py git_dirty) now use `git status --porcelain`, so an untracked source file also counts as dirty; `unsloth_compiled_cache/` is .gitignored and stays out of the check. scripts/pod.sh pull now syncs only `outputs/` and no longer swallows errors; results/ (including results/pod.json) is built on the Mac.
 - 2026-11-24: Added src/cve2cwe/scorer.py (the only CWE parser; coverage and test-lock checks; accuracy, invalid rate, macro-F1 with support threshold, kernel and CISA ADP slices, per-class table; 10,000-resample bootstrap for accuracy and a paired bootstrap of two systems; writes results/<system>/<split>/<run_id>.json) and src/cve2cwe/baselines.py (majority, keyword and TF-IDF+LinearSVC, run as `python -m cve2cwe baselines`, plus the top-5 cosine retrieval index used by the next step). configs/systems.yaml now carries `scoring` (bootstrap_resamples 10000, bootstrap_seed 20261124, macro_f1_min_support 20) and the `keyword_rules` table.
+- 2026-11-24: Added src/cve2cwe/runinfo.py. One shared snapshot of git commit, dirty flag, package versions and UTC time, captured once at process start and reused for every file a process writes. `git_dirty` is now defined as any modified or untracked file outside `outputs/` and `results/`; the two artefact directories are ignored because the process itself fills them. baselines, scorer, llm_eval and merge all go through runinfo; train.py keeps its own pre-side-effects capture.
+- 2026-11-24: Section 8 serving context length lifted from 4,096 to 8,192 tokens. Baseline prompts carry the full label list (53 lines) and up to 5 retrieval examples of 600 characters; 8,192 fits them with headroom. The value lives in configs/serve.yaml and is passed to vLLM with `--max-model-len`. The same section now also specifies the error policy exactly: context-length rejections are recorded as invalid and counted in run.json, any other error is retried three times with backoff, then the run exits non-zero and no predictions.jsonl is written (the file is renamed in from a temporary name at the end of a clean run).
+- 2026-11-24: Added configs/serve.yaml (max_model_len, gpu_memory_utilization, max_num_seqs, host, port). scripts/serve.sh now reads it and accepts `--revision`, `--port`, `--max-model-len`, `--gpu-memory-utilization`, `--served-model-name`.
+- 2026-11-24: Step 7 added src/cve2cwe/llm_eval.py (full runs: `python -m cve2cwe llm-eval --system {candidate,zero_shot,few_shot,retrieval} --split {dev,test} --model <served> --name <output>`; 32 concurrent requests; temperature 0; max 8 new tokens; logprobs on; thinking disabled; parsing only through scorer.parse; `--repeat-check 300` resends the first N records and fails if any raw output differs). The old lenient parser and the Step 5 smoke command were removed. prompts.py now exposes one `build_messages(system_name, description, examples=…)` builder for every LLM system; the candidate prompt is byte-identical and a golden test pins it. Section 9 gains a guard (enforced by llm_eval): a candidate_* run on the test split is refused until docs/ACCEPTANCE.md contains "Status: final" and configs/gate.yaml exists, with both committed and unmodified.
+- 2026-11-24: Step 7 tightened src/cve2cwe/merge.py. `--adapter` and `--out` are required; smoke defaults removed. The adapter's base model must match configs/train.yaml, the base commit actually loaded must match the pinned revision, every adapter key must sit in the language stack (vision-tower keys abort the merge), and a run.json is written to outputs/merge/<run_name>/ with the adapter path, output path, loaded base commit, distinct module prefixes, every output file with its size, and git state.

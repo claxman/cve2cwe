@@ -41,7 +41,7 @@ def test_cut_description_applies_max_chars() -> None:
             "user_template": "CVE description:\n{description}\n\nAnswer with one CWE id.",
         }
     }
-    msgs = build_messages("a" * 3000, prompts, systems)
+    msgs = build_messages("candidate", "a" * 3000, prompts=prompts, systems=systems)
     user_content = msgs[1]["content"]
     assert "a" * 2000 in user_content
     assert "a" * 2001 not in user_content

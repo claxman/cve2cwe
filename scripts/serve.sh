@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# Serve a merged bf16 checkpoint with vLLM. Section 8 of docs/DESIGN.md.
+# Serve an LLM with vLLM. DESIGN section 8 and Step 7 work order section C8.
 # Runs on the GPU pod inside the .venv-serve environment.
 #
+# Defaults are read from configs/serve.yaml so the invocation stays short.
+# Any --flag passed on the command line overrides the config.
+#
 # Usage:
-#   scripts/serve.sh <model_dir> [port]
-# Defaults:
-#   port=8000
+#   scripts/serve.sh <model_path_or_hub_id> [options]
+#
+# Options:
+#   --revision REV              pinned base revision (model is loaded at REV)
+#   --port PORT                 TCP port (default from configs/serve.yaml)
+#   --max-model-len N           server context length (default 8192)
+#   --gpu-memory-utilization F  fraction (default 0.90)
+#   --served-model-name NAME    name the client sends (default: the model id)
 #
 # Env vars:
 #   VLLM_LOG   path for stdout/stderr (default /workspace/logs/vllm.log)
@@ -13,16 +21,50 @@
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
-    echo "usage: scripts/serve.sh <model_dir> [port]" >&2
+    echo "usage: scripts/serve.sh <model> [--revision ...] [--port ...] \\" >&2
+    echo "       [--max-model-len ...] [--gpu-memory-utilization ...] [--served-model-name ...]" >&2
     exit 2
 fi
-MODEL="$1"
-PORT="${2:-8000}"
 
-if [ ! -d "$MODEL" ] && [[ "$MODEL" != *"/"*"/"* ]]; then
-    # Allow HF repo id like Qwen/Qwen3.5-4B too; just not a local path that is
-    # missing.
-    echo "serve.sh: model dir not found: $MODEL" >&2
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CFG="$ROOT/configs/serve.yaml"
+
+# Read defaults from configs/serve.yaml. Keep the parser small: one grep per
+# key. Any value overridden by --flag below wins.
+_yaml_get() {
+    local key="$1"
+    awk -v k="$key" 'BEGIN{FS=":[[:space:]]*"} $1==k {sub(/[[:space:]]*#.*$/,"",$2); gsub(/^"|"$/,"",$2); print $2; exit}' "$CFG"
+}
+
+MODEL="$1"; shift
+
+PORT="$(_yaml_get port)"
+MAX_MODEL_LEN="$(_yaml_get max_model_len)"
+GPU_MEM_UTIL="$(_yaml_get gpu_memory_utilization)"
+MAX_NUM_SEQS="$(_yaml_get max_num_seqs)"
+HOST="$(_yaml_get host)"
+REVISION=""
+SERVED_NAME=""
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --revision)              REVISION="$2"; shift 2 ;;
+        --port)                  PORT="$2"; shift 2 ;;
+        --max-model-len)         MAX_MODEL_LEN="$2"; shift 2 ;;
+        --gpu-memory-utilization) GPU_MEM_UTIL="$2"; shift 2 ;;
+        --served-model-name)     SERVED_NAME="$2"; shift 2 ;;
+        *) echo "serve.sh: unknown argument: $1" >&2; exit 2 ;;
+    esac
+done
+
+: "${PORT:?port missing (configs/serve.yaml)}"
+: "${MAX_MODEL_LEN:?max_model_len missing (configs/serve.yaml)}"
+: "${GPU_MEM_UTIL:?gpu_memory_utilization missing (configs/serve.yaml)}"
+: "${HOST:?host missing (configs/serve.yaml)}"
+SERVED_NAME="${SERVED_NAME:-$MODEL}"
+
+if [ ! -d "$MODEL" ] && [[ "$MODEL" != *"/"*"/"* ]] && [[ "$MODEL" != */* ]]; then
+    echo "serve.sh: model path not found and not a hub id: $MODEL" >&2
     exit 2
 fi
 
@@ -37,10 +79,18 @@ source "$VENV/bin/activate"
 # Thinking is disabled through the chat template at call time; the server
 # accepts `extra_body={"chat_template_kwargs": {"enable_thinking": false}}`.
 # Temperature 0, max 8 new tokens, logprobs are set on the client side.
-echo "[serve] starting vllm on :$PORT serving $MODEL" | tee -a "$LOG"
-exec vllm serve "$MODEL" \
-    --host 0.0.0.0 \
-    --port "$PORT" \
-    --dtype bfloat16 \
-    --max-model-len 4096 \
-    --max-num-seqs 32 2>&1 | tee -a "$LOG"
+CMD=(vllm serve "$MODEL"
+    --host "$HOST"
+    --port "$PORT"
+    --dtype bfloat16
+    --max-model-len "$MAX_MODEL_LEN"
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --served-model-name "$SERVED_NAME"
+)
+if [ -n "$REVISION" ]; then
+    CMD+=(--revision "$REVISION")
+fi
+
+echo "[serve] starting: ${CMD[*]}" | tee -a "$LOG"
+exec "${CMD[@]}" 2>&1 | tee -a "$LOG"

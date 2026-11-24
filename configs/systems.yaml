@@ -5,6 +5,25 @@
 
 max_description_chars: 2000
 
+# LLM baseline prompt shaping (DESIGN section 6, systems 4-6; Step 7).
+# These numbers go in the run.json of every LLM evaluation so a reader can
+# reconstruct the prompts from the prediction file alone.
+few_shot:
+  # Number of example turns placed before the query. One per class, picked
+  # from the k most frequent train classes; ties follow labels.json order.
+  num_examples: 8
+  # The most recent train record of each chosen class whose description is
+  # strictly under this length (in characters, after the 2,000-character
+  # input cut has no effect on anything this short) is used as the example.
+  max_example_chars: 400
+
+retrieval:
+  # The 5 closest train records per query from outputs/retrieval/<split>.jsonl
+  # are inlined as example turns, each description cut to max_example_chars,
+  # ordered least similar first so the closest neighbour is last.
+  num_examples: 5
+  max_example_chars: 600
+
 # Scoring settings. DESIGN section 5. Bootstrap uses 10,000 resamples with a
 # fixed seed so intervals are reproducible across machines. macro-F1 ignores
 # any class with fewer than macro_f1_min_support records in the split.

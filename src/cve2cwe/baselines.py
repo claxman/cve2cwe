@@ -23,15 +23,9 @@ from sklearn.pipeline import FeatureUnion
 from sklearn.preprocessing import normalize
 from sklearn.svm import LinearSVC
 
+from cve2cwe import runinfo
 from cve2cwe.prompts import REPO_ROOT, cut_description, load_systems_cfg
-from cve2cwe.scorer import (
-    _git_commit,
-    _git_dirty,
-    _now_iso,
-    _package_versions,
-    score_paired,
-    score_prediction_dir,
-)
+from cve2cwe.scorer import score_paired, score_prediction_dir
 
 # Fit everything with the same seed so identical configs produce identical
 # predictions (matches DESIGN "every run writes a run.json with seed").
@@ -280,7 +274,8 @@ def build_retrieval_tables(
 
 
 def _run_id(start_iso: str, commit: str) -> str:
-    ts = start_iso.replace("-", "").replace(":", "")  # 20261124T110532Z
+    # 20261124T110532Z from "2026-11-24T11:05:32Z"
+    ts = start_iso.replace("-", "").replace(":", "")
     short = commit[:7] if commit else "nogit"
     return f"{ts}-{short}"
 
@@ -313,6 +308,9 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     outputs_root = outputs_root or (REPO_ROOT / "outputs")
     results_root = results_root or (REPO_ROOT / "results")
 
+    # Capture clean-tree state once, before any output file exists.
+    info = runinfo.capture()
+
     systems_cfg = load_systems_cfg()
     max_chars = int(systems_cfg["max_description_chars"])
     scoring_cfg = systems_cfg["scoring"]
@@ -330,8 +328,8 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     )
 
     labels_order = _load_labels_ordered()
-    commit = _git_commit()
-    pkg = _package_versions()
+    commit = info.git_commit
+    pkg = dict(info.package_versions)
 
     # ---- Majority ----
     print("[baselines] majority: fit")
@@ -364,7 +362,7 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     paths: dict[str, dict[str, Path]] = {"majority": {}, "keyword": {}, "tfidf_svm": {}}
 
     for split, rows in split_rows.items():
-        start_iso = _now_iso()
+        start_iso = runinfo.now_iso()
         run_id = _run_id(start_iso, commit)
 
         # majority
@@ -378,12 +376,12 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
             "seed": SEED,
             "config": {"label": majority_label},
             "git_commit": commit,
-            "git_dirty": _git_dirty(),
+            "git_dirty": info.git_dirty,
             "package_versions": pkg,
             "fit_seconds": round(fit_t_majority, 4),
             "predict_seconds": round(pred_t, 4),
             "start": start_iso,
-            "end": _now_iso(),
+            "end": runinfo.now_iso(),
         }
         paths["majority"][split] = _write_prediction_dir(
             "majority", split, run_id, preds, meta, outputs_root
@@ -391,7 +389,7 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
         print(f"[baselines] majority {split}: predicted in {pred_t:.2f}s")
 
         # keyword
-        start_iso = _now_iso()
+        start_iso = runinfo.now_iso()
         run_id = _run_id(start_iso, commit)
         t0 = time.perf_counter()
         preds = predict_keyword(compiled, rows)
@@ -403,12 +401,12 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
             "seed": SEED,
             "config": {"rules": dict(keyword_rules)},
             "git_commit": commit,
-            "git_dirty": _git_dirty(),
+            "git_dirty": info.git_dirty,
             "package_versions": pkg,
             "fit_seconds": round(fit_t_keyword, 4),
             "predict_seconds": round(pred_t, 4),
             "start": start_iso,
-            "end": _now_iso(),
+            "end": runinfo.now_iso(),
         }
         paths["keyword"][split] = _write_prediction_dir(
             "keyword", split, run_id, preds, meta, outputs_root
@@ -416,7 +414,7 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
         print(f"[baselines] keyword {split}: predicted in {pred_t:.2f}s")
 
         # tfidf_svm
-        start_iso = _now_iso()
+        start_iso = runinfo.now_iso()
         run_id = _run_id(start_iso, commit)
         t0 = time.perf_counter()
         preds = predict_tfidf_svm(union, svm, rows)
@@ -440,12 +438,12 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
                 "max_description_chars": max_chars,
             },
             "git_commit": commit,
-            "git_dirty": _git_dirty(),
+            "git_dirty": info.git_dirty,
             "package_versions": pkg,
             "fit_seconds": round(fit_t_svm, 4),
             "predict_seconds": round(pred_t, 4),
             "start": start_iso,
-            "end": _now_iso(),
+            "end": runinfo.now_iso(),
         }
         paths["tfidf_svm"][split] = _write_prediction_dir(
             "tfidf_svm", split, run_id, preds, meta, outputs_root
@@ -468,7 +466,7 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     print("[baselines] scoring")
     for system, by_split in paths.items():
         for split, pdir in by_split.items():
-            summary = score_prediction_dir(pdir, results_root=results_root)
+            summary = score_prediction_dir(pdir, results_root=results_root, info=info)
             m = summary["metrics"]
             lo, hi = m["accuracy_ci95"]
             print(
@@ -483,6 +481,7 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
         paths["tfidf_svm"]["test"],
         paths["keyword"]["test"],
         results_root=results_root,
+        info=info,
     )
     lo, hi = diff["diff_accuracy_ci95"]
     print(

@@ -13,3 +13,13 @@ candidate:
     {description}
 
     Answer with one CWE id.
+
+# Baseline prompts for every open-weight and frontier LLM (DESIGN section 6,
+# systems 4-6, and Step 7 work order section B). The baseline system prompt
+# is the header below followed by a blank line and one line per label from
+# data/processed/labels.json ("CWE-79: <name>"). The user_template is the
+# same as candidate.user_template, used for the final query and for every
+# few-shot or retrieval example turn. The exact candidate prompt above must
+# not change; see tests/test_prompts.py::test_candidate_prompt_is_golden.
+baseline:
+  system_header: "You label CVE records. Given a CVE description, answer with the one CWE id an NVD analyst would assign. Choose from the list below. Answer with the id only, for example CWE-79."
