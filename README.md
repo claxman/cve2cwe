@@ -150,6 +150,9 @@ GPU: one H100 SXM 80 GB on RunPod Secure Cloud, on-demand, $4.42 per hour, read 
 
 A demo runs on a laptop with llama.cpp: [demo/README.md](demo/README.md). The adapter and the demo model file are at https://huggingface.co/ChaitanyaLaxman/cve2cwe-qwen3.5-4b.
 
+<img src="demo/screenshot.png" alt="Demo page with a result" width="420">
+The demo page on a laptop. The description in the picture is an invented example, not a CVE from the dataset.
+
 <!-- BEGIN table:demo -->
 | Records | Agreement with bf16 | Accuracy | Records with confidence |
 |---|---|---|---|
