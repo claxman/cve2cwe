@@ -79,11 +79,21 @@ def _git_commit() -> str:
 
 
 def _git_dirty() -> bool:
+    """True iff any TRACKED file in the repo differs from HEAD.
+
+    `git status --porcelain` would also list untracked files, which includes
+    unsloth's `unsloth_compiled_cache/` dir that appears after `import unsloth`;
+    `diff-index --quiet HEAD --` ignores untracked content and is the right
+    check for "did the committed code change under us".
+    """
     try:
-        out = subprocess.check_output(
-            ["git", "status", "--porcelain"], cwd=REPO_ROOT, stderr=subprocess.DEVNULL
+        rc = subprocess.call(
+            ["git", "diff-index", "--quiet", "HEAD", "--"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        return bool(out.strip())
+        return rc != 0
     except Exception:
         return False
 
