@@ -1,0 +1,60 @@
+{
+  "cost_usd": 0.566926,
+  "counts": {
+    "invalid_total": 157,
+    "total": 2266,
+    "valid": 2109
+  },
+  "finished_utc": "2026-11-24T12:41:59Z",
+  "git_commit": "c0e89f1b5514de2b944ad23835589b11fc135538",
+  "git_dirty": false,
+  "model_nick": "haiku",
+  "package_versions": {
+    "anthropic": "2.13.0",
+    "numpy": "2.5.5",
+    "pyyaml": "6.0.4"
+  },
+  "price_source": {
+    "input_usd_per_mtok": 0.1,
+    "output_usd_per_mtok": 0.5,
+    "price_read_on": "2026-11-24",
+    "url": "https://docs.anthropic.com/en/docs/about-claude/pricing"
+  },
+  "prompt_name": "retrieval",
+  "rate_limit_headers_probe": {
+    "anthropic-ratelimit-input-tokens-limit": "5000000",
+    "anthropic-ratelimit-input-tokens-remaining": "5000000",
+    "anthropic-ratelimit-input-tokens-reset": "2026-11-24T12:41:08Z",
+    "anthropic-ratelimit-output-tokens-limit": "1000000",
+    "anthropic-ratelimit-output-tokens-remaining": "1000000",
+    "anthropic-ratelimit-requests-limit": "10000",
+    "anthropic-ratelimit-requests-remaining": "9999",
+    "anthropic-ratelimit-requests-reset": "2026-11-24T12:41:08Z"
+  },
+  "request_settings": {
+    "concurrency": 32,
+    "max_retries": 5,
+    "max_tokens": 16,
+    "temperature": "not accepted by SDK 2.13.0 (deterministic default)",
+    "thinking": {
+      "type": "disabled"
+    }
+  },
+  "run_id": "20261124T124106Z-c0e89f1",
+  "served_model": "claude-haiku-5-5",
+  "split": "test",
+  "started_utc": "2026-11-24T12:41:06Z",
+  "system": "claude_haiku_5_5_retrieval",
+  "systems_config": {
+    "max_description_chars": 2000,
+    "retrieval": {
+      "max_example_chars": 600,
+      "num_examples": 5
+    }
+  },
+  "token_usage": {
+    "input_tokens": 5584548,
+    "output_tokens": 16943
+  },
+  "wall_seconds": 50.38
+}
