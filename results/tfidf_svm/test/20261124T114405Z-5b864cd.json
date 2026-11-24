@@ -1,7 +1,7 @@
 {
-  "end": "2026-11-24T11:11:40Z",
-  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
-  "git_dirty": true,
+  "end": "2026-11-24T11:44:19Z",
+  "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+  "git_dirty": false,
   "metrics": {
     "accuracy": 0.7268314210061783,
     "accuracy_ci95": [
@@ -542,14 +542,14 @@
     "scikit-learn": "1.9.1",
     "scipy": "1.18.1"
   },
-  "prediction_dir": "outputs/tfidf_svm/test/20261124T111125Z-a2920fb",
-  "run_id": "20261124T111125Z-a2920fb",
+  "prediction_dir": "outputs/tfidf_svm/test/20261124T114405Z-5b864cd",
+  "run_id": "20261124T114405Z-5b864cd",
   "scoring": {
     "bootstrap_resamples": 10000,
     "bootstrap_seed": 20261124,
     "macro_f1_min_support": 20
   },
   "split": "test",
-  "start": "2026-11-24T11:11:40Z",
+  "start": "2026-11-24T11:41:37Z",
   "system": "tfidf_svm"
 }

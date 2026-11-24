@@ -17,20 +17,20 @@
       "CWE-918": "server[- ]side request forgery|\\bssrf\\b"
     }
   },
-  "end": "2026-11-24T11:11:25Z",
-  "fit_seconds": 0.0006,
-  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
-  "git_dirty": true,
+  "end": "2026-11-24T11:44:05Z",
+  "fit_seconds": 0.0005,
+  "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+  "git_dirty": false,
   "package_versions": {
     "numpy": "2.5.5",
     "pyyaml": "6.0.4",
     "scikit-learn": "1.9.1",
     "scipy": "1.18.1"
   },
-  "predict_seconds": 0.3339,
-  "run_id": "20261124T111125Z-a2920fb",
+  "predict_seconds": 0.3385,
+  "run_id": "20261124T114404Z-5b864cd",
   "seed": 20261124,
   "split": "test",
-  "start": "2026-11-24T11:11:25Z",
+  "start": "2026-11-24T11:44:04Z",
   "system": "keyword"
 }

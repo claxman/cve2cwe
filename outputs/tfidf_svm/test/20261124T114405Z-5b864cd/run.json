@@ -26,20 +26,20 @@
       2
     ]
   },
-  "end": "2026-11-24T11:11:25Z",
-  "fit_seconds": 143.0232,
-  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
-  "git_dirty": true,
+  "end": "2026-11-24T11:44:07Z",
+  "fit_seconds": 145.3315,
+  "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+  "git_dirty": false,
   "package_versions": {
     "numpy": "2.5.5",
     "pyyaml": "6.0.4",
     "scikit-learn": "1.9.1",
     "scipy": "1.18.1"
   },
-  "predict_seconds": 1.4848,
-  "run_id": "20261124T111123Z-a2920fb",
+  "predict_seconds": 1.8619,
+  "run_id": "20261124T114405Z-5b864cd",
   "seed": 20261124,
-  "split": "dev",
-  "start": "2026-11-24T11:11:23Z",
+  "split": "test",
+  "start": "2026-11-24T11:44:05Z",
   "system": "tfidf_svm"
 }

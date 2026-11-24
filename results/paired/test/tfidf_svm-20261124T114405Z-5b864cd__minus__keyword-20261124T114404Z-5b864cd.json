@@ -1,12 +1,12 @@
 {
   "a": {
     "accuracy": 0.7268314210061783,
-    "run_id": "20261124T111125Z-a2920fb",
+    "run_id": "20261124T114405Z-5b864cd",
     "system": "tfidf_svm"
   },
   "b": {
     "accuracy": 0.3954104148278906,
-    "run_id": "20261124T111125Z-a2920fb",
+    "run_id": "20261124T114404Z-5b864cd",
     "system": "keyword"
   },
   "diff_accuracy": 0.3314210061782877,
@@ -14,9 +14,9 @@
     0.3111209179170345,
     0.35216240070608995
   ],
-  "finished_utc": "2026-11-24T11:11:40Z",
-  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
-  "git_dirty": true,
+  "finished_utc": "2026-11-24T11:44:20Z",
+  "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+  "git_dirty": false,
   "package_versions": {
     "numpy": "2.5.5",
     "pyyaml": "6.0.4",
