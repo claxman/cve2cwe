@@ -1,0 +1,21 @@
+{
+  "config": {
+    "label": "CWE-787"
+  },
+  "end": "2026-11-24T11:11:23Z",
+  "fit_seconds": 0.0052,
+  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
+  "git_dirty": false,
+  "package_versions": {
+    "numpy": "2.5.5",
+    "pyyaml": "6.0.4",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1"
+  },
+  "predict_seconds": 0.0093,
+  "run_id": "20261124T111123Z-a2920fb",
+  "seed": 20261124,
+  "split": "dev",
+  "start": "2026-11-24T11:11:23Z",
+  "system": "majority"
+}

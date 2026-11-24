@@ -1,0 +1,36 @@
+{
+  "config": {
+    "rules": {
+      "CWE-125": "out[- ]of[- ]bounds read|oob read",
+      "CWE-190": "integer overflow",
+      "CWE-22": "path traversal|directory traversal",
+      "CWE-352": "cross[- ]site request forgery|\\bcsrf\\b",
+      "CWE-401": "memory leak|memleak",
+      "CWE-416": "use[- ]after[- ]free|\\buaf\\b",
+      "CWE-476": "null[- ]pointer[- ]dereference|null[- ]ptr[- ]deref|null dereference",
+      "CWE-502": "deserialization of untrusted data|insecure deserialization",
+      "CWE-667": "deadlock",
+      "CWE-78": "os command injection",
+      "CWE-787": "out[- ]of[- ]bounds write|oob write",
+      "CWE-79": "cross[- ]site scripting|\\bxss\\b",
+      "CWE-89": "sql injection",
+      "CWE-918": "server[- ]side request forgery|\\bssrf\\b"
+    }
+  },
+  "end": "2026-11-24T11:11:25Z",
+  "fit_seconds": 0.0006,
+  "git_commit": "a2920fbf5f7004394d8d6e15ed3ab14ea5fd1b92",
+  "git_dirty": true,
+  "package_versions": {
+    "numpy": "2.5.5",
+    "pyyaml": "6.0.4",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1"
+  },
+  "predict_seconds": 0.3339,
+  "run_id": "20261124T111125Z-a2920fb",
+  "seed": 20261124,
+  "split": "test",
+  "start": "2026-11-24T11:11:25Z",
+  "system": "keyword"
+}
