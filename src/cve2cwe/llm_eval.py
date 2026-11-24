@@ -29,6 +29,7 @@ import math
 import os
 import subprocess
 import sys
+import threading
 import time
 from collections import Counter, defaultdict
 from collections.abc import Iterable
@@ -460,7 +461,20 @@ def run(
         retrieval_table = _load_retrieval_table(split)
         train_by_id = {r["cve_id"]: r for r in _load_train_rows()}
 
-    client = OpenAI(base_url=base_url, api_key=os.environ.get("OPENAI_API_KEY", "EMPTY"))
+    # One client per worker thread. A shared OpenAI client under a thread
+    # pool has been observed to send a request the server answers 404
+    # ("model does not exist") while the same model name succeeds serially.
+    thread_clients = threading.local()
+
+    def _client():
+        client = getattr(thread_clients, "client", None)
+        if client is None:
+            client = OpenAI(
+                base_url=base_url,
+                api_key=os.environ.get("OPENAI_API_KEY", "EMPTY"),
+            )
+            thread_clients.client = client
+        return client
 
     # Build messages up front so repeat-check compares the exact same
     # messages we send during the main pass.
@@ -502,7 +516,7 @@ def run(
 
     def _run_one(idx: int) -> tuple[int, dict]:
         pred = predict_one(
-            client,
+            _client(),
             model,
             msg_sets[idx],
             label_set,
