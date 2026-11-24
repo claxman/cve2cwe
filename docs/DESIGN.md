@@ -138,13 +138,16 @@ Champion: the system other than the candidate with the highest accuracy on the l
 ## 7. Fine-tune
 
 - Base model: Qwen/Qwen3.5-4B, Apache 2.0, revision pinned to a commit hash in configs/train.yaml. The release date is read from the Hugging Face Hub API and recorded. The test window starts after it.
+- Newer Qwen generations were not used. Qwen3.6 and Qwen3.8 have no open-weight model under 27B, and Qwen3.8-27B was released on 14 August 2026, inside the test window.
 - Method: supervised fine-tuning with LoRA on bf16 weights, using Unsloth and PyTorch.
-- Not 4-bit QLoRA, for three reasons: a 4B model fits in GPU memory without quantisation; Unsloth's guide for this model family advises against 4-bit (https://unsloth.ai/docs/models/qwen3.5/fine-tune, to be re-checked at Step 5); and an adapter trained on bf16 weights merges into the same weights it was trained on, so the served checkpoint is the trained model.
-- Training text: the exact inference prompt (chat template, thinking disabled) followed by the label and the end-of-turn token. Loss on the label tokens only. A test asserts that the inference prompt is a prefix of the training text.
+- Not 4-bit QLoRA, for three reasons: a 4B model fits in GPU memory without quantisation; Unsloth's guide for this model family advises against 4-bit (https://unsloth.ai/docs/models/qwen3.5/fine-tune, confirmed at Step 5); and an adapter trained on bf16 weights merges into the same weights it was trained on, so the served checkpoint is the trained model.
+- Training text: the exact inference prompt (chat template, thinking disabled) followed by the label and the end-of-turn token. Loss on the label and the end-of-turn token only (the empty think block before the label is masked). A test asserts that the inference prompt is a prefix of the training text.
 - The candidate's prompt is a short instruction with no label list.
-- Starting values in configs/train.yaml: LoRA rank 16, alpha 16, dropout 0, adapters on the attention and MLP projection layers, learning rate 2e-4 with warmup and decay, maximum 1,024 tokens. Epochs and batch size are fixed after a smoke run measures speed. Changes are made on dev only and each change is a commit.
-- Seeds 1, 2 and 3. The seed controls adapter initialisation and data order. Decoding is greedy, so there is no sampling noise at inference. One baseline run is repeated to confirm outputs are identical.
-- Logged to Weights and Biases, public project: train loss, dev loss on a fixed 500-record dev sample at fixed intervals, learning rate, GPU memory, wall time.
+- Starting values in configs/train.yaml: LoRA rank 16, alpha 16, dropout 0, adapters on the attention and MLP projection layers of the language stack only (0 adapters in the vision tower), learning rate 2e-4 with cosine warmup and decay (5% of total steps), adamw_torch_fused optimiser. per_device_train_batch_size 32, gradient_accumulation_steps 1, length-grouped sampling within shuffled mega-batches (not a global sort). max_seq_length is set to the overall maximum rendered token length rounded up to the next multiple of 64, measured with `python -m cve2cwe train --profile-lengths` after the 2,000-character description cut; training fails before step 1 if any example is longer, because a truncated example loses its label. Changes are made on dev only and each change is a commit.
+- Epochs rule, recorded in configs/train.yaml as a comment: a 100-step probe on a random 3,200-row train sample estimates the full-epoch time as probe_time x 42,291 / 3,200. 2 epochs if the estimate is at most 12 minutes, 1 epoch if at most 25 minutes, stop and report if over 25 minutes.
+- Seeds 1, 2 and 3. The seed controls adapter initialisation (`random_state` in FastLanguageModel.get_peft_model) and data order (`seed` and `data_seed` in SFTConfig, which feed the LengthGroupedSampler). Decoding is greedy, so there is no sampling noise at inference. One baseline run is repeated to confirm outputs are identical.
+- Logged to Weights and Biases, public project: train loss every 10 steps, dev loss on a fixed 500-record dev sample (sample seed shared by every training seed) every 200 steps, learning rate, GPU memory, wall time.
+- Outputs: the adapter is saved at the end of every epoch under /workspace/checkpoints/seed{N}/epoch{M}/. Each run writes run.json at the start and completes it at the end with seed, full config, git commit, git_dirty flag, package versions, start, end, training seconds, tokens per second, peak GPU memory, final train loss, every dev loss and the W&B URL.
 - Model selection uses dev only.
 - Shipped checkpoint: the seed with the median dev accuracy.
 - Target: one seed trains in under an hour on one rented GPU.
@@ -154,6 +157,7 @@ Champion: the system other than the candidate with the highest accuracy on the l
 - The adapter is merged into the base weights and saved as a standalone bf16 checkpoint.
 - Served with vLLM. Every LLM evaluation, base and fine-tuned, goes through the same OpenAI-compatible client, so the evaluated artifact is the one that would ship.
 - Requests: thinking disabled through the chat template, temperature 0, at most 8 new tokens, logprobs on.
+- Serving context length: 4,096 tokens. The 2,000-character input cut keeps every rendered prompt well under this. A request that would still exceed the server's context (or fails for any other reason) is recorded as invalid output in the prediction file; it is not silently truncated and it does not crash the evaluation run.
 - Confidence of a prediction: the product of the token probabilities of the generated label.
 - Benchmark on a fixed sample of dev prompts at stated concurrency levels: p50 and p95 latency, records per second, the GPU, its hourly price with the date, cost per 1,000 records at full utilisation, and the monthly volume at which an always-on GPU costs the same as each Claude model.
 - Spend ledger in results/: GPU hours by purpose, API spend from recorded token usage, both checked against the provider dashboards.
@@ -275,6 +279,10 @@ src/cve2cwe/
   leakage.py    split and lock checks
   scorer.py     strict parser, metrics, bootstrap
   baselines.py  majority, keyword rules, TF-IDF linear
+  prompts.py    shared chat-message builder: cuts the description to
+                configs/systems.yaml max_description_chars, formats the
+                candidate prompt, applies the chat template; used by both
+                train.py and llm_eval.py
   llm_eval.py   prompts and client for any OpenAI-compatible endpoint
   frontier.py   Claude reference runs
   train.py      Unsloth LoRA fine-tune
@@ -282,7 +290,7 @@ src/cve2cwe/
   bench.py      latency, throughput, cost
   gate.py       PROMOTE or REJECT with evidence
   report.py     results to README tables, routing table, error analysis
-scripts/        setup_git.sh  pod_setup.sh  serve.sh
+scripts/        setup_git.sh  pod.sh  serve.sh
 demo/           app.py  README.md
 data/           NOTICE.md  DATASET_CARD.md
   processed/    train.jsonl.gz  dev.jsonl  test.jsonl  labels.json
@@ -300,3 +308,9 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: Added .githooks/commit-msg to reject any commit whose message carries an AI co-author or generated-by trailer. Appendix A and Appendix B updated accordingly. Policy: one author per commit, the person accountable for it; agent use is disclosed in README.md and AGENTS.md, not in the trailer.
 - 2026-11-24: Section 4.3 now records a git_dirty flag in MANIFEST.json alongside git_commit. The flag is read at the start of the run, so it reflects the working tree before the data stage writes anything.
 - 2026-11-24: The first two commits (design and skeleton) were rewritten once, before any results existed, to drop an automatic Co-authored-by trailer. File contents were not changed. History is not rewritten after this point.
+- 2026-11-24: scripts/pod_setup.sh is replaced by scripts/pod.sh (subcommands push, run, pull, ssh). The pod address lives in .pod (gitignored), not in the script. Appendix B updated.
+- 2026-11-24: Section 7 updated to say Qwen3.6 and Qwen3.8 were considered and ruled out: neither generation has an open-weight model under 27B, and Qwen3.8-27B was released on 14 August 2026, inside the test window. The remaining Qwen3.5 release is the only open-weight Qwen that predates the test window.
+- 2026-11-24: Section 7 starting values and target now match configs/train.yaml: per_device_train_batch_size 32, gradient_accumulation_steps 1, length-grouped sampling within shuffled mega-batches, max_seq_length set to the overall max rendered token length rounded up to the next multiple of 64 (training fails if any example is longer), adamw_torch_fused optimiser, dev loss on a fixed 500-record sample (sample seed shared across training seeds) every 200 steps, train loss every 10 steps, epoch rule tied to a 100-step probe. "Loss on the label tokens only" becomes "Loss on the label and the end-of-turn token only": the empty think block before the label is masked. Adapters attach to the language stack only; vision-tower LoRA module count must be 0.
+- 2026-11-24: Added src/cve2cwe/prompts.py (shared chat-message builder that applies the 2,000-character input cut once for both train and inference) and configs/systems.yaml (holds max_description_chars; Step 6 extends it with per-system identifiers). Appendix B updated. A CI test asserts a 3,000-character description is cut to 2,000.
+- 2026-11-24: Section 8 adds the 4,096-token serving context length and the rule for requests that still exceed it (and for any other serving error): recorded as invalid output in the prediction file, not silently truncated, not crashing the run.
+- 2026-11-24: Training (Step 8) started before Steps 6 and 7 to use GPU time while the CPU baselines are built. Training reads train.jsonl.gz and the dev sample only; test.jsonl is not opened at this point.

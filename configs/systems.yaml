@@ -1,0 +1,9 @@
+# Systems configuration shared by every evaluation (baselines, candidate,
+# frontier). DESIGN section 3: "every system uses the first 2,000 characters
+# of the CVE description". That cut is applied once, by the shared helper in
+# src/cve2cwe/prompts.py, before the chat template is rendered.
+#
+# Step 6 will add per-system identifiers (baseline name, candidate checkpoint,
+# frontier model id) alongside this key.
+
+max_description_chars: 2000

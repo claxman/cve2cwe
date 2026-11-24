@@ -1,0 +1,30 @@
+{
+  "provider": "RunPod",
+  "region": "AP-IN-1",
+  "cloud": "Secure Cloud",
+  "image": "runpod/pytorch:2.1.0-cu1281-torch280-ubuntu2404",
+  "started_utc": "2026-11-24T08:10:00Z",
+  "probed_utc": "2026-11-24T08:13:36Z",
+  "price_usd_per_hour": {
+    "compute": 4.39,
+    "storage": 0.028,
+    "total": 4.42
+  },
+  "gpu": {
+    "model": "NVIDIA H100 80GB HBM3",
+    "count": 1,
+    "form_factor": "SXM",
+    "memory_total_mib": 81559,
+    "memory_free_mib_at_probe": 81081,
+    "compute_capability": "9.0",
+    "driver_version": "595.112.07"
+  },
+  "cuda_version": "12.8",
+  "torch_version": "2.8.0+cu128",
+  "os": "Ubuntu 24.04.5 LTS",
+  "disks": {
+    "container": {"size": "50G", "used": "16M", "avail": "50G", "mount": "/", "persistent": false},
+    "volume":    {"size": "140G", "used": "0", "avail": "140G", "mount": "/workspace", "persistent": true}
+  },
+  "ssh_key_fingerprint": "SHA256:HR18S8XsiDJeFOdBWKB6SxA7qjwawDX+IzolI9uzvwA"
+}

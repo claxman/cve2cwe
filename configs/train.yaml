@@ -1,0 +1,121 @@
+# Fine-tune parameters. Section 7 of docs/DESIGN.md is the spec.
+
+# Base model: Qwen/Qwen3.5-4B, Apache 2.0. Pinned commit hash and release
+# dates come from the Hugging Face Hub API (model_info).
+base_model: "Qwen/Qwen3.5-4B"
+revision: "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+hub_created_at: "2026-02-27T14:45:03+00:00"
+hub_last_modified: "2026-03-02T00:52:52+00:00"
+hub_license: "apache-2.0"
+
+# Not 4-bit QLoRA. Unsloth's Qwen3.5 guide says: "It is not recommended to do
+# QLoRA (4-bit) training on the Qwen3.5 models, no matter MoE or dense, due
+# to higher than normal quantization differences."
+load_in_4bit: false
+load_in_16bit: true
+
+# LoRA on attention + MLP projection layers, language model only.
+lora:
+  r: 16
+  alpha: 16
+  dropout: 0
+  bias: "none"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  use_gradient_checkpointing: "unsloth"
+
+# Sequence length. Set to the overall max rendered token length rounded up to
+# the next multiple of 64, measured with --profile-lengths after the 2000-
+# character input cut. Training fails before step 1 if any example exceeds
+# this value, because a truncated example loses its label.
+#
+# Measured 2026-11-24 on data/processed/train.jsonl.gz and dev.jsonl:
+#   train: p50=134  p90=236  p99=1103  max=1543  total=7,493,938 tokens
+#   dev:   p50=154  p90=385  p99=1170  max=1495  total=613,499 tokens
+#   overall_max=1543 -> rounded up to the next multiple of 64 = 1600
+max_seq_length: 1600
+
+# Optimisation. adamw_torch_fused is the Torch-native optimiser; the 8-bit
+# variant would save memory we do not need on an H100 at this scale.
+optim:
+  learning_rate: 2.0e-4
+  # transformers 5.17 and trl 1.15 only expose `warmup_steps`; train.py
+  # converts this ratio to a step count based on the known total steps
+  # (max_steps for the probe, steps_per_epoch * num_train_epochs for a seed).
+  warmup_ratio: 0.05
+  lr_scheduler_type: "cosine"
+  weight_decay: 0.0
+  optimizer: "adamw_torch_fused"
+
+# Batching. per_device_train_batch_size is the lever for speed within the
+# H100's 80 GiB. gradient_accumulation_steps stays at 1; group_by_length
+# is always on so batches pad to the longest example in the batch, and the
+# LengthGroupedSampler shuffles by seed then sorts within mega-batches
+# (not a global sort). Confirmed with transformers 5 and trl 1.15 docs.
+batch:
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  gradient_accumulation_steps: 1
+
+# Loss mask (see docs/DESIGN.md section 7). train_on_responses_only in
+# Unsloth marks everything after `response_part` inside the assistant turn as
+# loss-carrying. For Qwen3.5 with enable_thinking=False the chat template
+# emits `<think>\n\n</think>\n\n` before the label; putting that in
+# `response_part` restricts loss to the label tokens and <|im_end|> only.
+loss_mask:
+  instruction_part: "<|im_start|>user\n"
+  response_part: "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+
+# Dev-loss evaluation. A fixed sample of 500 dev records; sample_seed is
+# shared by every training seed so dev loss is comparable across runs.
+dev_eval:
+  sample_size: 500
+  sample_seed: 1234
+  eval_steps: 200
+
+# Train loss cadence.
+logging_steps: 10
+
+# Epoch rule (work order 4, B10):
+#   - probe epoch estimate <= 12 min   -> num_train_epochs = 2
+#   - probe epoch estimate <= 25 min   -> num_train_epochs = 1
+#   - probe epoch estimate >  25 min   -> stop and report
+#
+# Probe on 2026-11-24: 100 steps on 3,200-row random sample took 103.9 s
+# (1.04 s/step, peak 15.3 GiB). Estimated epoch on 42,291 rows = 22.9 min,
+# which puts us in the 12-25 min band, so num_train_epochs = 1. Three seeds
+# at 1 epoch each is roughly 69 minutes of training.
+num_train_epochs: 1
+
+# Seeds used for the three training runs.
+seeds: [1, 2, 3]
+
+# Weights and Biases.
+wandb:
+  project: "cve2cwe"
+  entity: null
+
+# Speed probe. Random sample of 3,200 rows, 100 steps, same settings as the
+# real runs. Epoch estimate = probe time * 42,291 / 3,200.
+probe:
+  seed: 42
+  train_rows: 3200
+  max_steps: 100
+  logging_steps: 10
+  output_dir: "/workspace/checkpoints/probe"
+
+# Legacy smoke config kept for reference; no longer used.
+smoke:
+  train_rows: 300
+  max_steps: 60
+  seed: 1
+  logging_steps: 1
+  run_name: "smoke"
+  output_dir: "/workspace/checkpoints/smoke"
+  merged_dir: "/workspace/checkpoints/smoke-merged"

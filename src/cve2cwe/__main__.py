@@ -20,16 +20,30 @@ STAGES = (
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) != 1 or argv[0] not in STAGES:
+    if not argv or argv[0] not in STAGES:
         sys.stderr.write(
-            "usage: python -m cve2cwe <stage>\nstages: " + " ".join(STAGES) + "\n"
+            "usage: python -m cve2cwe <stage> [stage args...]\nstages: "
+            + " ".join(STAGES)
+            + "\n"
         )
         return 1
-    stage = argv[0]
+    stage, rest = argv[0], argv[1:]
     if stage == "data":
         from cve2cwe import data
 
         return data.main()
+    if stage == "train":
+        from cve2cwe import train
+
+        return train.main(rest)
+    if stage == "merge":
+        from cve2cwe import merge
+
+        return merge.main(rest)
+    if stage == "llm-eval":
+        from cve2cwe import llm_eval
+
+        return llm_eval.main(rest)
     sys.stdout.write(f"{stage}: not built yet\n")
     return 1
 

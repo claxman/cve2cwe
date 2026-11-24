@@ -1,0 +1,15 @@
+# Prompts for the candidate (the fine-tuned Qwen3.5-4B). Section 7 of
+# docs/DESIGN.md: "The candidate's prompt is a short instruction with no
+# label list." Reasoning is disabled through the chat template.
+#
+# The description is cut to configs/systems.yaml max_description_chars
+# before being formatted into the user template. The cut is applied by
+# src/cve2cwe/prompts.py and is shared by train and inference.
+
+candidate:
+  system: "You label CVE records. Given a CVE description, answer with the one CWE id an NVD analyst would assign, for example CWE-79. Answer with the id only."
+  user_template: |
+    CVE description:
+    {description}
+
+    Answer with one CWE id.

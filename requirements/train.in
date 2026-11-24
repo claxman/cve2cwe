@@ -1,1 +1,19 @@
-# GPU pod only, filled in at Step 5.
+# Training environment: GPU pod only (H100, CUDA 12.x).
+# Resolved on the pod with `uv pip compile` into requirements/train.txt.
+# Source of truth for library choice: Unsloth Qwen3.5 fine-tune guide
+# (https://unsloth.ai/docs/models/qwen3.5/fine-tune) which requires
+# transformers v5 for Qwen3.5 and recommends bf16 LoRA (not 4-bit QLoRA).
+
+unsloth
+unsloth_zoo
+transformers>=5
+trl
+peft
+accelerate
+datasets
+bitsandbytes
+wandb
+pyyaml
+# torchvision/pillow are optional vision deps for the unified VLM loader.
+torchvision
+pillow

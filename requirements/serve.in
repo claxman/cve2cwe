@@ -1,1 +1,9 @@
-# GPU pod only, filled in at Step 5.
+# Serving environment: GPU pod only (H100, CUDA 12.x).
+# Resolved on the pod with `uv pip compile` into requirements/serve.txt.
+# vLLM 0.17.1 is the first release with Qwen3.5 support
+# (https://github.com/vllm-project/vllm/releases/tag/v0.17.1).
+
+vllm==0.17.1
+# OpenAI-compatible client, used by the smoke test to hit the vLLM server.
+openai
+pyyaml
