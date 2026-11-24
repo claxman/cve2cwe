@@ -128,7 +128,7 @@ Prediction files: outputs/{system}/{split}/{run_id}/predictions.jsonl with keys 
 4. Base model zero-shot: the system prompt lists the label set with names and asks for the id only.
 5. Base model few-shot: one example for each of the eight most frequent train classes, chosen by a written rule (most recent train record of that class under 400 characters).
 6. Base model retrieval few-shot: the five most similar train records by TF-IDF cosine similarity, each cut to 600 characters, shown with their labels.
-7. Claude Haiku 5.5 and Claude Sonnet 5.5, zero-shot and retrieval few-shot, same prompts, no extended thinking.
+7. Claude Haiku 5.5 and Claude Sonnet 5.5, zero-shot and retrieval few-shot, same prompts. Haiku 5.5 was called with thinking disabled. Sonnet 5.5 does not accept thinking disabled or a temperature. It was called with thinking between_tools, the lowest setting it accepts.
 8. The fine-tuned model. This is the candidate.
 
 Rules for prompts: they live in configs/prompts.yaml. They may be revised on dev, never on test. Each revision is a commit.
@@ -146,7 +146,7 @@ Champion: the system other than the candidate with the highest accuracy on the l
 - Starting values in configs/train.yaml: LoRA rank 16, alpha 16, dropout 0, adapters on the attention and MLP projection layers of the language stack only (0 adapters in the vision tower), learning rate 2e-4 with cosine warmup and decay (5% of total steps), adamw_torch_fused optimiser. per_device_train_batch_size 32, gradient_accumulation_steps 1, length-grouped sampling within shuffled mega-batches (not a global sort). max_seq_length is set to the overall maximum rendered token length rounded up to the next multiple of 64, measured with `python -m cve2cwe train --profile-lengths` after the 2,000-character description cut; training fails before step 1 if any example is longer, because a truncated example loses its label. Changes are made on dev only and each change is a commit.
 - Epochs rule, recorded in configs/train.yaml as a comment: a 100-step probe on a random 3,200-row train sample estimates the full-epoch time as probe_time x 42,291 / 3,200. 2 epochs if the estimate is at most 12 minutes, 1 epoch if at most 25 minutes, stop and report if over 25 minutes.
 - Two training lengths are compared: 1 epoch and 2 epochs, three seeds each. The first set ran at 1 epoch because a 100-step probe overestimated the epoch time (22.9 minutes estimated, 9.5 measured). The candidate is the length with the higher mean dev accuracy over its three seeds. A tie goes to 1 epoch. Only the chosen length's three checkpoints are evaluated on test.
-- Seeds 1, 2 and 3. The seed controls adapter initialisation (`random_state` in FastLanguageModel.get_peft_model) and data order (`seed` and `data_seed` in SFTConfig, which feed the LengthGroupedSampler). Decoding is greedy, so there is no sampling noise at inference. One baseline run is repeated to confirm outputs are identical.
+- Seeds 1, 2 and 3. The seed controls adapter initialisation (`random_state` in FastLanguageModel.get_peft_model) and data order (`seed` and `data_seed` in SFTConfig, which feed the LengthGroupedSampler). Decoding is greedy. A repeat of the first 300 records found that 3 outputs differed between two identical runs at 32 concurrent requests, and none differed with one request at a time. Gate numbers come from the deterministic mode (enforce-eager, prefix caching off, one request at a time). Other LLM runs are batched and can differ on about 1% of outputs.
 - Logged to Weights and Biases, public project: train loss every 10 steps, dev loss on a fixed 500-record dev sample (sample seed shared by every training seed) every 200 steps, learning rate, GPU memory, wall time.
 - Outputs: the adapter is saved at the end of every epoch under /workspace/checkpoints/seed{N}/epoch{M}/. Each run writes run.json at the start and completes it at the end with seed, full config, git commit, git_dirty flag, package versions, start, end, training seconds, tokens per second, peak GPU memory, final train loss, every dev loss and the W&B URL.
 - Model selection uses dev only.
@@ -169,7 +169,7 @@ Champion: the system other than the candidate with the highest accuracy on the l
 Draft until Step 9. The owner can change these numbers until then. Each change is a commit.
 
 - G1 gain: the candidate's mean test accuracy over three seeds is at least the champion's plus 2.0 points.
-- G2 noise: for every seed, the 95% paired-bootstrap interval of candidate minus champion excludes zero.
+- G2 noise: for every seed, the lower bound of the 95% paired-bootstrap interval of candidate minus champion is above zero.
 - G3 must-pass: a pinned set of test records where the description names the weakness outright (the keyword table fires exactly once), the label agrees, and the champion is right. Every seed gets at least 98% of them.
 - G4 validity: invalid output is at most 0.5% for every seed.
 - Reported, not gated: macro-F1, kernel and non-kernel accuracy, label-noise slices, cost per 1,000 records, confidence routing.
@@ -331,3 +331,6 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: Step 7 tightened src/cve2cwe/merge.py. `--adapter` and `--out` are required; smoke defaults removed. The adapter's base model must match configs/train.yaml, the base commit actually loaded must match the pinned revision, every adapter key must sit in the language stack (vision-tower keys abort the merge), and a run.json is written to outputs/merge/<run_name>/ with the adapter path, output path, loaded base commit, distinct module prefixes, every output file with its size, and git state.
 - 2026-11-24: seed2 and seed3 of the 1-epoch set record git_dirty true. The check at that commit used git diff-index, which also flags timestamp-only changes. Verified on 2026-11-24 in /workspace/run-225b6dd: git diff HEAD --stat is empty, so no file content differed from commit 225b6dd.
 - 2026-11-24: Claude systems run on the test split only. Their prompts are not tuned on dev and the champion is chosen on test.
+- 2026-11-24: Section 7 no longer says greedy decoding leaves no noise at inference. A repeat of 300 records differed on 3 outputs at 32 concurrent requests and on none with one request at a time. Gate numbers come from the deterministic mode. Other LLM runs are batched and can differ on about 1% of outputs.
+- 2026-11-24: Claude Sonnet 5.5 does not accept thinking disabled or a temperature. It was called with thinking between_tools, the lowest setting. Haiku 5.5 was called with thinking disabled.
+- 2026-11-24: Section 9 G2 reads "lower bound above zero". An interval that sits entirely below zero does not pass.
