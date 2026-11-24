@@ -1,0 +1,41 @@
+{
+  "files": [
+    {
+      "bytes": 675568928,
+      "mtime_utc": "2026-11-24T16:14:03Z",
+      "name": "e2-seed1-merged.BF16-mmproj.gguf",
+      "path": "/workspace/checkpoints/candidate_e2-seed1-gguf_gguf/e2-seed1-merged.BF16-mmproj.gguf",
+      "sha256": "dba151c31b6d6323a20dfd81f1ec0cd67e77a4c2b72229cf6575bf2ef90518eb"
+    },
+    {
+      "bytes": 2815884288,
+      "mtime_utc": "2026-11-24T16:14:32Z",
+      "name": "e2-seed1-merged.Q4_K_M.gguf",
+      "path": "/workspace/checkpoints/candidate_e2-seed1-gguf_gguf/e2-seed1-merged.Q4_K_M.gguf",
+      "sha256": "1bf9f6308682ddaf4ac39246091edb628b11e7d74a9e8c2776fdb0fcb1107603"
+    }
+  ],
+  "finished_utc": "2026-11-24T16:14:32Z",
+  "git_commit": "3d6d2760c0fad89736da8d8b3904e3a7a65274d8",
+  "git_dirty": false,
+  "llama_cpp_dir": "/root/.unsloth/llama.cpp",
+  "output_dir": "/workspace/checkpoints/candidate_e2-seed1-gguf_gguf",
+  "package_versions": {
+    "numpy": "2.3.5",
+    "torch": "2.14.1",
+    "unsloth": "2026.11.10",
+    "unsloth_zoo": "2026.11.10"
+  },
+  "quantization_method": "q4_k_m",
+  "route": "FastLanguageModel.from_pretrained on the merged bf16 checkpoint, then save_pretrained_gguf(quantization_method='q4_k_m'). Unsloth writes the GGUF files in a sibling directory whose name ends in _gguf. For this vision-language model it also writes a BF16 mmproj next to the Q4_K_M file.",
+  "run_name": "candidate_e2-seed1-gguf",
+  "source_architectures": [
+    "Qwen3_5ForConditionalGeneration"
+  ],
+  "source_checkpoint": "/workspace/checkpoints/e2-seed1-merged",
+  "source_model_type": "qwen3_5",
+  "started_utc": "2026-11-24T16:11:15Z",
+  "started_utc_source": "tmux session cve2cwe-gguf create time, pod clock UTC",
+  "unsloth": "2026.11.10",
+  "unsloth_zoo": "2026.11.10"
+}

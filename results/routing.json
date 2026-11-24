@@ -1,0 +1,132 @@
+{
+  "split": "test",
+  "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+  "git_dirty": false,
+  "best_claude": "claude_sonnet_5_5_retrieval",
+  "small_model_cost_per_1000_usd": 0.013302520044043196,
+  "small_model_cost_source": {
+    "bench_run_id": "20261124T162621Z-be734af",
+    "concurrency": 32,
+    "records_per_second": 92.29663054163717,
+    "gpu_price_usd_per_hour": 4.42
+  },
+  "cascade_cost_formula": "small_per_1000 + (1 - auto_label_rate) * claude_per_1000",
+  "hours_per_month": 730.0,
+  "hours_per_month_basis": "24 * 365 / 12",
+  "gpu_price_usd_per_hour": 4.42,
+  "gpu_price_source": "RunPod Secure Cloud on-demand, read on the RunPod console 2026-11-24",
+  "systems": {
+    "candidate_e2-seed1": {
+      "prediction_dir": "outputs/candidate_e2-seed1/test/20261124T145749Z-ca2c6d6",
+      "run_id": "20261124T145749Z-ca2c6d6",
+      "thresholds": {
+        "at_0.95": {
+          "n": 2266,
+          "n_auto": 1638,
+          "n_rest": 628,
+          "auto_label_rate": 0.7228596646072374,
+          "accuracy_auto": 0.9139194139194139,
+          "accuracy_rest": 0.3375796178343949,
+          "cascade_accuracy": 0.7519858781994704,
+          "threshold": 0.7455690224895739,
+          "cost_per_1000_usd": {
+            "small_only": 0.013302520044043196,
+            "claude_only": 5.000064430714915,
+            "cascade": 1.3990220533577975
+          }
+        },
+        "at_0.97": {
+          "n": 2266,
+          "n_auto": 1487,
+          "n_rest": 779,
+          "auto_label_rate": 0.6562224183583407,
+          "accuracy_auto": 0.9381304640215198,
+          "accuracy_rest": 0.4030808729139923,
+          "cascade_accuracy": 0.7413945278022948,
+          "threshold": 0.8571389794337373,
+          "cost_per_1000_usd": {
+            "small_only": 0.013302520044043196,
+            "claude_only": 5.000064430714915,
+            "cascade": 1.7322125780876965
+          }
+        }
+      }
+    },
+    "tfidf_svm": {
+      "prediction_dir": "outputs/tfidf_svm/test/20261124T114405Z-5b864cd",
+      "run_id": "20261124T114405Z-5b864cd",
+      "thresholds": {
+        "at_0.95": {
+          "n": 2266,
+          "n_auto": 1398,
+          "n_rest": 868,
+          "auto_label_rate": 0.616946160635481,
+          "accuracy_auto": 0.9012875536480687,
+          "accuracy_rest": 0.44585253456221197,
+          "cascade_accuracy": 0.735657546337158,
+          "threshold": 0.5249350643900713,
+          "cost_per_1000_usd": {
+            "small_only": 0.013302520044043196,
+            "claude_only": 5.000064430714915,
+            "cascade": 1.9285963972993594
+          }
+        },
+        "at_0.97": {
+          "n": 2266,
+          "n_auto": 971,
+          "n_rest": 1295,
+          "auto_label_rate": 0.42850838481906445,
+          "accuracy_auto": 0.9495365602471678,
+          "accuracy_rest": 0.5598455598455598,
+          "cascade_accuracy": 0.7246248896734334,
+          "threshold": 0.9941718718366617,
+          "cost_per_1000_usd": {
+            "small_only": 0.013302520044043196,
+            "claude_only": 5.000064430714915,
+            "cascade": 2.870797417562055
+          }
+        }
+      }
+    }
+  },
+  "claude_costs": {
+    "claude_haiku_5_5_retrieval": {
+      "run_id": "20261124T124106Z-c0e89f1",
+      "n": 2266,
+      "cost_usd": 0.566926,
+      "cost_per_record_usd": 0.0002501879964695499,
+      "cost_per_1000_usd": 0.2501879964695499,
+      "test_accuracy": 0.6849073256840247
+    },
+    "claude_haiku_5_5_zero_shot": {
+      "run_id": "20261124T124205Z-c0e89f1",
+      "n": 2266,
+      "cost_usd": 0.361839,
+      "cost_per_record_usd": 0.0001596818181818182,
+      "cost_per_1000_usd": 0.1596818181818182,
+      "test_accuracy": 0.6584289496910856
+    },
+    "claude_sonnet_5_5_retrieval": {
+      "run_id": "20261124T123744Z-c0e89f1",
+      "n": 2266,
+      "cost_usd": 11.330146,
+      "cost_per_record_usd": 0.005000064430714915,
+      "cost_per_1000_usd": 5.000064430714915,
+      "test_accuracy": 0.7162400706090026
+    },
+    "claude_sonnet_5_5_zero_shot": {
+      "run_id": "20261124T123933Z-c0e89f1",
+      "n": 2266,
+      "cost_usd": 7.235624,
+      "cost_per_record_usd": 0.003193126213592233,
+      "cost_per_1000_usd": 3.193126213592233,
+      "test_accuracy": 0.7157987643424537
+    }
+  },
+  "break_even_records_per_month": {
+    "claude_haiku_5_5_retrieval": 12896701.86232418,
+    "claude_haiku_5_5_zero_shot": 20206433.247936234,
+    "claude_sonnet_5_5_retrieval": 645311.6844213658,
+    "claude_sonnet_5_5_zero_shot": 1010483.0765114384
+  }
+}

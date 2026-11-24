@@ -1,0 +1,72 @@
+{
+  "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+  "git_dirty": false,
+  "gpu_cost_usd": 0.07738683333333334,
+  "gpu_price_usd_per_hour": 4.42,
+  "invalid_count": 0,
+  "kernel_share": 0.9377022653721683,
+  "prediction_dir": "outputs/candidate_e2-seed1_backlog/backlog/20261124T162831Z-be734af",
+  "rows": 6180,
+  "run_id": "20261124T162831Z-be734af",
+  "share_at_or_above": {
+    "at_0.95": 0.5509708737864077,
+    "at_0.97": 0.45728155339805826
+  },
+  "thresholds": {
+    "at_0.95": 0.7455690224895739,
+    "at_0.97": 0.8571389794337373
+  },
+  "top_predicted_cwes": [
+    {
+      "count": 1148,
+      "cwe": "CWE-416",
+      "name": "Use After Free"
+    },
+    {
+      "count": 801,
+      "cwe": "CWE-476",
+      "name": "NULL Pointer Dereference"
+    },
+    {
+      "count": 726,
+      "cwe": "CWE-401",
+      "name": "Missing Release of Memory after Effective Lifetime"
+    },
+    {
+      "count": 699,
+      "cwe": "CWE-125",
+      "name": "Out-of-bounds Read"
+    },
+    {
+      "count": 451,
+      "cwe": "CWE-787",
+      "name": "Out-of-bounds Write"
+    },
+    {
+      "count": 417,
+      "cwe": "CWE-667",
+      "name": "Improper Locking"
+    },
+    {
+      "count": 274,
+      "cwe": "CWE-908",
+      "name": "Use of Uninitialized Resource"
+    },
+    {
+      "count": 242,
+      "cwe": "CWE-362",
+      "name": "Concurrent Execution using Shared Resource with Improper Synchronization"
+    },
+    {
+      "count": 185,
+      "cwe": "CWE-770",
+      "name": "Allocation of Resources Without Limits or Throttling"
+    },
+    {
+      "count": 150,
+      "cwe": "CWE-617",
+      "name": "Reachable Assertion"
+    }
+  ],
+  "wall_seconds": 63.03
+}

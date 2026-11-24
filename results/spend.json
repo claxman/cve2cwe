@@ -1,0 +1,450 @@
+{
+  "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+  "git_dirty": false,
+  "written_utc": "2026-11-24T16:31:36Z",
+  "gpu": {
+    "provider": "RunPod",
+    "cloud": "Secure Cloud",
+    "gpu": "H100 SXM 80 GB",
+    "started_utc": "2026-11-24T08:10:00Z",
+    "price_usd_per_hour": 4.42,
+    "price_source": "RunPod Secure Cloud on-demand, read on the RunPod console 2026-11-24",
+    "hours_so_far": 8.360092947222222,
+    "total_usd": 36.951610826722224,
+    "serve_yaml_price_usd_per_hour": 4.42,
+    "seconds_by_purpose": {
+      "training": {
+        "seconds": 5653.58,
+        "runs": [
+          {
+            "path": "outputs/train/e2-seed1/run.json",
+            "system": "e2-seed1",
+            "split": null,
+            "seconds": 1204.34,
+            "git_commit": "1d32ed06924f953ecc5cf6d94e53e8a68444f4dc",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/train/e2-seed2/run.json",
+            "system": "e2-seed2",
+            "split": null,
+            "seconds": 1205.79,
+            "git_commit": "1d32ed06924f953ecc5cf6d94e53e8a68444f4dc",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/train/e2-seed3/run.json",
+            "system": "e2-seed3",
+            "split": null,
+            "seconds": 1202.32,
+            "git_commit": "1d32ed06924f953ecc5cf6d94e53e8a68444f4dc",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/train/seed1/run.json",
+            "system": null,
+            "split": null,
+            "seconds": 655.97,
+            "git_commit": "225b6dd351d559f25c9f5ac1866e90eda72eccbc",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/train/seed2/run.json",
+            "system": null,
+            "split": null,
+            "seconds": 691.23,
+            "git_commit": "225b6dd351d559f25c9f5ac1866e90eda72eccbc",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/train/seed3/run.json",
+            "system": null,
+            "split": null,
+            "seconds": 693.93,
+            "git_commit": "225b6dd351d559f25c9f5ac1866e90eda72eccbc",
+            "git_dirty": true
+          }
+        ]
+      },
+      "merge": {
+        "seconds": 305.0,
+        "runs": [
+          {
+            "path": "outputs/merge/e2-seed1/run.json",
+            "system": "e2-seed1",
+            "split": null,
+            "seconds": 34.0,
+            "git_commit": "0abbc77e5a0f40c1bf078e526fe9964ed3f2ffaf",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/merge/e2-seed2/run.json",
+            "system": "e2-seed2",
+            "split": null,
+            "seconds": 35.0,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/merge/e2-seed2-re/run.json",
+            "system": "e2-seed2-re",
+            "split": null,
+            "seconds": 35.0,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/merge/e2-seed3/run.json",
+            "system": "e2-seed3",
+            "split": null,
+            "seconds": 39.0,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/merge/e2-seed3-re/run.json",
+            "system": "e2-seed3-re",
+            "split": null,
+            "seconds": 39.0,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/merge/seed1/run.json",
+            "system": "seed1",
+            "split": null,
+            "seconds": 53.0,
+            "git_commit": "0abbc77e5a0f40c1bf078e526fe9964ed3f2ffaf",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/merge/seed2/run.json",
+            "system": "seed2",
+            "split": null,
+            "seconds": 35.0,
+            "git_commit": "0abbc77e5a0f40c1bf078e526fe9964ed3f2ffaf",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/merge/seed3/run.json",
+            "system": "seed3",
+            "split": null,
+            "seconds": 35.0,
+            "git_commit": "0abbc77e5a0f40c1bf078e526fe9964ed3f2ffaf",
+            "git_dirty": false
+          }
+        ]
+      },
+      "evaluation": {
+        "seconds": 3294.34,
+        "runs": [
+          {
+            "path": "outputs/candidate_e2-seed1/dev/20261124T134546Z-d5303a1/run.json",
+            "system": "candidate_e2-seed1",
+            "split": "dev",
+            "seconds": 65.65,
+            "git_commit": "d5303a1435427ea1aa91a5905c8cb557b33f76b1",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed1/test/20261124T145749Z-ca2c6d6/run.json",
+            "system": "candidate_e2-seed1",
+            "split": "test",
+            "seconds": 676.5,
+            "git_commit": "ca2c6d6f33b63cc72b79f430a5a82eec62c8d27e",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed1_batched/test/20261124T154439Z-ca2c6d6/run.json",
+            "system": "candidate_e2-seed1_batched",
+            "split": "test",
+            "seconds": 25.38,
+            "git_commit": "ca2c6d6f33b63cc72b79f430a5a82eec62c8d27e",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed2/dev/20261124T134810Z-d5303a1/run.json",
+            "system": "candidate_e2-seed2",
+            "split": "dev",
+            "seconds": 64.27,
+            "git_commit": "d5303a1435427ea1aa91a5905c8cb557b33f76b1",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed2/test/20261124T151027Z-ca2c6d6/run.json",
+            "system": "candidate_e2-seed2",
+            "split": "test",
+            "seconds": 684.04,
+            "git_commit": "ca2c6d6f33b63cc72b79f430a5a82eec62c8d27e",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed3/dev/20261124T135037Z-d5303a1/run.json",
+            "system": "candidate_e2-seed3",
+            "split": "dev",
+            "seconds": 63.56,
+            "git_commit": "d5303a1435427ea1aa91a5905c8cb557b33f76b1",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_e2-seed3/test/20261124T152313Z-ca2c6d6/run.json",
+            "system": "candidate_e2-seed3",
+            "split": "test",
+            "seconds": 683.39,
+            "git_commit": "ca2c6d6f33b63cc72b79f430a5a82eec62c8d27e",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_seed1/dev/20261124T125927Z-c0e89f1/run.json",
+            "system": "candidate_seed1",
+            "split": "dev",
+            "seconds": 35.9,
+            "git_commit": "c0e89f1b5514de2b944ad23835589b11fc135538",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/candidate_seed2/dev/20261124T130647Z-c0e89f1/run.json",
+            "system": "candidate_seed2",
+            "split": "dev",
+            "seconds": 35.44,
+            "git_commit": "c0e89f1b5514de2b944ad23835589b11fc135538",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/candidate_seed3/dev/20261124T132701Z-d5303a1/run.json",
+            "system": "candidate_seed3",
+            "split": "dev",
+            "seconds": 36.94,
+            "git_commit": "d5303a1435427ea1aa91a5905c8cb557b33f76b1",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_few_shot/dev/20261124T123900Z-2ac0c26/run.json",
+            "system": "qwen35_4b_few_shot",
+            "split": "dev",
+            "seconds": 78.26,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_few_shot/dev/20261124T144634Z-40b811d/run.json",
+            "system": "qwen35_4b_few_shot",
+            "split": "dev",
+            "seconds": 80.01,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_few_shot/test/20261124T124019Z-2ac0c26/run.json",
+            "system": "qwen35_4b_few_shot",
+            "split": "test",
+            "seconds": 67.01,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_few_shot/test/20261124T144758Z-40b811d/run.json",
+            "system": "qwen35_4b_few_shot",
+            "split": "test",
+            "seconds": 67.51,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_retrieval/dev/20261124T124539Z-2ac0c26/run.json",
+            "system": "qwen35_4b_retrieval",
+            "split": "dev",
+            "seconds": 71.7,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_retrieval/dev/20261124T144910Z-40b811d/run.json",
+            "system": "qwen35_4b_retrieval",
+            "split": "dev",
+            "seconds": 71.71,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_retrieval/test/20261124T124652Z-2ac0c26/run.json",
+            "system": "qwen35_4b_retrieval",
+            "split": "test",
+            "seconds": 63.58,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_retrieval/test/20261124T145027Z-40b811d/run.json",
+            "system": "qwen35_4b_retrieval",
+            "split": "test",
+            "seconds": 64.65,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_zero_shot/dev/20261124T123557Z-2ac0c26/run.json",
+            "system": "qwen35_4b_zero_shot",
+            "split": "dev",
+            "seconds": 134.64,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_zero_shot/dev/20261124T144325Z-40b811d/run.json",
+            "system": "qwen35_4b_zero_shot",
+            "split": "dev",
+            "seconds": 134.54,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          },
+          {
+            "path": "outputs/qwen35_4b_zero_shot/test/20261124T123813Z-2ac0c26/run.json",
+            "system": "qwen35_4b_zero_shot",
+            "split": "test",
+            "seconds": 44.69,
+            "git_commit": "2ac0c260ec36b293e7e0b40fc3f61b890faf4eb5",
+            "git_dirty": true
+          },
+          {
+            "path": "outputs/qwen35_4b_zero_shot/test/20261124T144544Z-40b811d/run.json",
+            "system": "qwen35_4b_zero_shot",
+            "split": "test",
+            "seconds": 44.97,
+            "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+            "git_dirty": false
+          }
+        ]
+      },
+      "benchmark": {
+        "seconds": 65.0,
+        "runs": [
+          {
+            "path": "outputs/bench/20261124T162621Z-be734af/run.json",
+            "system": null,
+            "split": null,
+            "seconds": 65.0,
+            "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+            "git_dirty": false
+          }
+        ]
+      },
+      "backlog": {
+        "seconds": 63.03,
+        "runs": [
+          {
+            "path": "outputs/candidate_e2-seed1_backlog/backlog/20261124T162831Z-be734af/run.json",
+            "system": "candidate_e2-seed1_backlog",
+            "split": "backlog",
+            "seconds": 63.03,
+            "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+            "git_dirty": false
+          }
+        ]
+      },
+      "gguf_export": {
+        "seconds": 197.0,
+        "runs": [
+          {
+            "path": "outputs/merge/candidate_e2-seed1-gguf/run.json",
+            "system": "candidate_e2-seed1-gguf",
+            "split": null,
+            "seconds": 197.0,
+            "git_commit": "3d6d2760c0fad89736da8d8b3904e3a7a65274d8",
+            "git_dirty": false
+          }
+        ]
+      }
+    },
+    "recorded_gpu_seconds": 9577.95,
+    "recorded_gpu_hours": 2.660541666666667,
+    "billed_minus_recorded_hours": 5.699551280555555
+  },
+  "claude": {
+    "runs": [
+      {
+        "path": "outputs/claude_haiku_5_5_retrieval/test/20261124T124106Z-c0e89f1/run.json",
+        "system": "claude_haiku_5_5_retrieval",
+        "cost_usd": 0.566926,
+        "records": 2266
+      },
+      {
+        "path": "outputs/claude_haiku_5_5_zero_shot/test/20261124T124205Z-c0e89f1/run.json",
+        "system": "claude_haiku_5_5_zero_shot",
+        "cost_usd": 0.361839,
+        "records": 2266
+      },
+      {
+        "path": "outputs/claude_sonnet_5_5_retrieval/test/20261124T123744Z-c0e89f1/run.json",
+        "system": "claude_sonnet_5_5_retrieval",
+        "cost_usd": 11.330146,
+        "records": 2266
+      },
+      {
+        "path": "outputs/claude_sonnet_5_5_zero_shot/test/20261124T123933Z-c0e89f1/run.json",
+        "system": "claude_sonnet_5_5_zero_shot",
+        "cost_usd": 7.235624,
+        "records": 2266
+      }
+    ],
+    "total_usd": 19.494535
+  },
+  "cpu_baselines": [
+    {
+      "path": "outputs/keyword/dev/20261124T114403Z-5b864cd/run.json",
+      "system": "keyword",
+      "split": "dev",
+      "seconds": 0.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    },
+    {
+      "path": "outputs/keyword/test/20261124T114404Z-5b864cd/run.json",
+      "system": "keyword",
+      "split": "test",
+      "seconds": 1.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    },
+    {
+      "path": "outputs/majority/dev/20261124T114403Z-5b864cd/run.json",
+      "system": "majority",
+      "split": "dev",
+      "seconds": 0.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    },
+    {
+      "path": "outputs/majority/test/20261124T114404Z-5b864cd/run.json",
+      "system": "majority",
+      "split": "test",
+      "seconds": 0.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    },
+    {
+      "path": "outputs/tfidf_svm/dev/20261124T114403Z-5b864cd/run.json",
+      "system": "tfidf_svm",
+      "split": "dev",
+      "seconds": 1.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    },
+    {
+      "path": "outputs/tfidf_svm/test/20261124T114405Z-5b864cd/run.json",
+      "system": "tfidf_svm",
+      "split": "test",
+      "seconds": 2.0,
+      "git_commit": "5b864cd22c79525771c39a7fa751ddd350ead923",
+      "git_dirty": false
+    }
+  ],
+  "unclassified_run_json": [],
+  "run_json_missing_seconds": [],
+  "not_recorded": [
+    "The 30-record sanity calls have no run.json and are not in this ledger.",
+    "Failed attempts that wrote no run.json are not in this ledger.",
+    "Model-load time and idle time between runs are in the billed GPU hours and not in seconds_by_purpose. billed_minus_recorded_hours is that gap.",
+    "CPU baselines (majority, keyword, tfidf_svm) are listed separately and are not GPU time."
+  ]
+}

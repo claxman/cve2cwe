@@ -1,0 +1,15 @@
+{
+  "base_url": "http://127.0.0.1:8000/v1",
+  "finished_utc": "2026-11-24T16:27:26Z",
+  "git_commit": "be734afae274d386b0243b27de5c947c2137a509",
+  "git_dirty": false,
+  "package_versions": {
+    "httpx": "0.28.1",
+    "numpy": "2.2.6",
+    "openai": "2.24.0",
+    "pyyaml": "6.0.4"
+  },
+  "run_id": "20261124T162621Z-be734af",
+  "served_model": "candidate-e2-seed1",
+  "started_utc": "2026-11-24T16:26:21Z"
+}
