@@ -39,3 +39,16 @@ bench:
   max_new_tokens: 8
   temperature: 0.0
   max_num_seqs: 64
+
+# Laptop demo. The Gradio page and the 200-record check both read these.
+# The model file is the Q4_K_M GGUF; every number in the README comes from
+# the bf16 checkpoint, not from this server.
+demo:
+  base_url: "http://127.0.0.1:8080/v1"
+  model: "candidate-e2-seed1"
+  check_records: 200
+  seed: 20261124
+  max_new_tokens: 8
+  temperature: 0.0
+  max_retries: 3
+  backoff_seconds: 2.0

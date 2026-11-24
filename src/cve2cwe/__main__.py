@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
+from pathlib import Path
 
 STAGES = (
     "data",
@@ -69,6 +71,13 @@ def main(argv: list[str] | None = None) -> int:
         from cve2cwe import report
 
         return report.main(rest)
+    if stage == "demo":
+        path = Path(__file__).resolve().parents[2] / "demo" / "app.py"
+        spec = importlib.util.spec_from_file_location("cve2cwe_demo_app", path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec is not None and spec.loader is not None
+        spec.loader.exec_module(mod)
+        return mod.main(rest)
     sys.stdout.write(f"{stage}: not built yet\n")
     return 1
 

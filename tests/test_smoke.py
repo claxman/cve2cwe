@@ -62,6 +62,7 @@ def test_each_unbuilt_stage_reports_not_built() -> None:
         "bench",
         "backlog",
         "report",
+        "demo",
     }
     for stage in STAGES:
         if stage in built:
