@@ -703,7 +703,11 @@ def _n_invalid(system: str, run_id: str) -> int:
 
 
 def _acceptance() -> tuple[str, str]:
-    """Commit that set the acceptance file to final, and its UTC time."""
+    """Commit that set the acceptance file to final, and its UTC time.
+
+    The parent has to be present. A shallow checkout has no parent, and git
+    then treats the tip as the commit that added the line.
+    """
     proc = subprocess.run(
         [
             "git",
@@ -720,9 +724,30 @@ def _acceptance() -> tuple[str, str]:
         capture_output=True,
         text=True,
     )
-    sha, iso = proc.stdout.splitlines()[0].split("\t")
-    stamp = datetime.fromisoformat(iso).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return sha, stamp
+    for line in proc.stdout.splitlines():
+        sha, iso = line.split("\t")
+        parent = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{sha}^"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if parent.returncode != 0:
+            continue
+        diff = subprocess.run(
+            ["git", "diff", "-U0", f"{sha}^", sha, "--", "docs/ACCEPTANCE.md"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        if "+Status: final" not in diff.stdout:
+            continue
+        stamp = datetime.fromisoformat(iso).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return sha, stamp
+    raise SystemExit(
+        "report: the commit that set docs/ACCEPTANCE.md to final is not in this checkout"
+    )
 
 
 def _first_candidate_test_utc(gate: dict) -> str:

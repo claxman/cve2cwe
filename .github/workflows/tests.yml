@@ -8,7 +8,11 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
+      # The README check finds the acceptance commit with git log.
+      # A one-commit checkout has no parent, so that search would name the tip.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
