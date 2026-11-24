@@ -1,11 +1,14 @@
 # cve2cwe
 
+![tests](https://github.com/claxman/cve2cwe/actions/workflows/tests.yml/badge.svg)
+
 Should labelling a CVE with its CWE weakness type move from a frontier model to a small fine-tuned open-weight model? This repo answers with a locked test set, an acceptance bar committed before the result, and a gate script that prints the verdict.
 
 ## Decision
 
 <!-- BEGIN headline -->
 - **Verdict: PROMOTE.** On the locked test set the fine-tuned model scores 75.9% (mean of 3 seeds). The best baseline, a TF-IDF linear model, scores 72.7%. The best Claude run, Sonnet 5.5 with retrieved examples, scores 71.6%. The pass line was 74.7%.
+- **What fine-tuning added.** The same base model scores 56.6% zero-shot and 65.7% with retrieved examples on test. Fine-tuned, it scores 75.9%.
 - **Every seed clears every check.** Gains over the best baseline: +2.7, +3.6 and +3.3 points, with 95% intervals that stay above zero (lowest bound +1.3). Must-pass items: 859, 863 and 862 of 868. Invalid outputs: none.
 - **What it labels on its own.** At the confidence threshold fixed on dev, it auto-labels 72.3% of test CVEs at 91.4% precision. The linear model auto-labels 61.7% at 90.1% precision.
 - **A frontier fallback does not help.** On the CVEs the fine-tuned model is unsure about, it scores 33.8% and Claude Sonnet 5.5 scores 33.0%.
@@ -30,7 +33,7 @@ Should labelling a CVE with its CWE weakness type move from a frontier model to 
 3. Preference tuning (DPO) on the most frequent confusions, only if supervised fine-tuning stops improving.
 4. What production still needs: monitoring, drift alarms, threshold recalibration and a retraining schedule.
 
-Everything below is the evidence. Every number in this file is generated from files under results/ by "python -m cve2cwe report". CI fails if this file is out of date.
+Everything below is the evidence. Every measured number in this file is generated from the run files by "python -m cve2cwe report". CI fails if this file is out of date.
 
 ## The problem and what this solves
 
@@ -131,11 +134,14 @@ Mean dev accuracy, 1 epoch: 88.5%. 2 epochs: 88.8%. Chosen length: 2 epochs.
 
 Runs are tracked in Weights & Biases: https://wandb.ai/chaitanyalaxman118-chaitanya-personal/cve2cwe
 
+**Left out on purpose: DPO and GRPO.** Supervised fine-tuning came first because every training record has one known answer and tens of thousands are available. Preference tuning (DPO) needs pairs of a better and a worse answer for the same CVE. The confusion table in the results is where those pairs would come from, and it is worth trying only once supervised training stops improving. Reward-based tuning (GRPO) pays off when the reward says more than right or wrong, for example partial credit for a parent or child CWE, or when there are no labels but there is a checker. With exact-match labels it would add cost and instability for no clear gain. Neither was run here.
+
 ## Inference
 
-- The adapter is merged into the base weights and served with vLLM as a standalone checkpoint. Every LLM score in this repo, base or fine-tuned, went through the same client.
+- The adapter is merged into the base weights and served with vLLM as a standalone checkpoint. Every Qwen score in this repo, base or fine-tuned, went through the same client. The Claude runs use the Anthropic API with the same prompts.
 - A check confirmed that the prompt the server builds has the same token count as the training prompt.
 - Confidence is the product of the probabilities of the label's tokens.
+- Decoding is greedy with at most 8 new tokens. The three seeds therefore vary training only, not sampling.
 
 <!-- BEGIN table:serving -->
 | Concurrency | Records per second | Latency p50 ms | Latency p95 ms | USD per 1,000 |
@@ -151,6 +157,7 @@ GPU: one H100 SXM 80 GB on RunPod Secure Cloud, on-demand, $4.42 per hour, read 
 A demo runs on a laptop with llama.cpp: [demo/README.md](demo/README.md). The adapter and the demo model file are at https://huggingface.co/ChaitanyaLaxman/cve2cwe-qwen3.5-4b.
 
 <img src="demo/screenshot.png" alt="Demo page with a result" width="420">
+
 The demo page on a laptop. The description in the picture is an invented example, not a CVE from the dataset.
 
 <!-- BEGIN table:demo -->
@@ -168,6 +175,7 @@ Run 20261124T170118Z-79fe926. The demo model is the 4-bit file.
 - The champion is the best system other than the fine-tuned model, picked on the test set. That favours the champion.
 - The code enforces the order: llm_eval.py refuses to score a fine-tuned model on test until the acceptance file is final and committed.
 - Gate runs use one request at a time, because vLLM is not bit-reproducible when it batches. A batched run is shown next to them.
+- The must-pass set is the part of the test set where a miss has no excuse: CVEs whose description names the weakness outright (exactly one keyword rule fires), where that rule agrees with the label and the champion is right. It was pinned in the acceptance commit.
 
 <!-- BEGIN table:gate -->
 | Gate | Bar | Fine-tuned Qwen3.5-4B, seed 1 (shipped) | Fine-tuned Qwen3.5-4B, seed 2 | Fine-tuned Qwen3.5-4B, seed 3 |
@@ -202,6 +210,8 @@ Verdict: PROMOTE. Acceptance commit ca2c6d6f33b63cc72b79f430a5a82eec62c8d27e at 
 | Keyword rules | 51.7% | 39.5% (37.6% to 41.6%) | 56.4% | 31.3% |
 | Majority class | 13.4% | 10.2% (8.9% to 11.4%) | 0.0% | 1.0% |
 
+Spread across the three seeds: 75.4% to 76.3%.
+
 Claude runs are test only. The mean of the seeds has no stored interval.
 <!-- END table:main -->
 
@@ -216,6 +226,32 @@ Where the gain comes from:
 | CISA disagrees | 318 | 43.4% match NVD, 13.2% match CISA | 38.7% match NVD, 14.8% match CISA | 35.8% match NVD, 22.6% match CISA |
 | CISA absent | 1,480 | 80.9% | 78.3% | 75.7% |
 <!-- END table:slices -->
+
+By class, for classes with at least 20 test records:
+
+<!-- BEGIN table:perclass -->
+| CWE | Name | Test records | Recall of the shipped checkpoint | Recall of the champion |
+|---|---|---|---|---|
+| CWE-125 | Out-of-bounds Read | 240 | 80.8% | 82.1% |
+| CWE-129 | Improper Validation of Array Index | 21 | 57.1% | 23.8% |
+| CWE-190 | Integer Overflow or Wraparound | 40 | 80.0% | 80.0% |
+| CWE-269 | Improper Privilege Management | 50 | 12.0% | 0.0% |
+| CWE-306 | Missing Authentication for Critical Functionality | 44 | 6.8% | 34.1% |
+| CWE-362 | Concurrent Execution using Shared Resource with Improper Synchronization | 93 | 74.2% | 57.0% |
+| CWE-401 | Missing Release of Memory after Effective Lifetime | 233 | 85.0% | 79.4% |
+| CWE-415 | Double Free | 67 | 89.6% | 83.6% |
+| CWE-416 | Use After Free | 363 | 94.5% | 90.9% |
+| CWE-476 | NULL Pointer Dereference | 331 | 89.4% | 92.4% |
+| CWE-617 | Reachable Assertion | 25 | 56.0% | 40.0% |
+| CWE-667 | Improper Locking | 102 | 85.3% | 79.4% |
+| CWE-78 | Improper Neutralization of Special Elements used in an OS Command | 21 | 81.0% | 85.7% |
+| CWE-787 | Out-of-bounds Write | 230 | 62.6% | 59.6% |
+| CWE-79 | Improper Neutralization of Input During Web Page Generation | 31 | 83.9% | 83.9% |
+| CWE-835 | Loop with Unreachable Exit Condition | 30 | 73.3% | 80.0% |
+| CWE-862 | Missing Authorization | 33 | 24.2% | 27.3% |
+| CWE-863 | Incorrect Authorization | 65 | 26.2% | 29.2% |
+| CWE-908 | Use of Uninitialized Resource | 55 | 85.5% | 72.7% |
+<!-- END table:perclass -->
 
 How much can be labelled without a person or a frontier model:
 
@@ -250,6 +286,8 @@ What it costs:
 | Claude Sonnet 5.5, zero-shot | 1,010,483 |
 
 Break-even is the monthly volume at which a GPU left on for 730 hours at $4.42 per hour costs the same as that Claude run. Backlog batch GPU cost: $0.0774. The test window averages 11,536 CVEs per month (83,820 records, 221 days from 2026-04-15 to 2026-11-22, the latest publication in the locked test set and the unlabelled backlog, a month of 730 hours). That is below every break-even volume.
+
+Claude list prices per million tokens, read on 2026-11-24: Haiku 5.5 $0.10 input and $0.50 output; Sonnet 5.5 $2.00 input and $10.00 output. Source: https://docs.anthropic.com/en/docs/about-claude/pricing.
 <!-- END table:cost -->
 
 Labels for CVEs that have none today:
@@ -299,6 +337,8 @@ Where it is wrong:
 | [CVE-2026-45461](https://nvd.nist.gov/vuln/detail/CVE-2026-45461) | CWE-787 | CWE-416 | 99.2% | none |
 <!-- END table:errors -->
 
+Most confusions are between neighbouring classes: out-of-bounds write against out-of-bounds read or classic buffer overflow, and the access-control family collapsing into improper authentication. The CISA column shows where a second source sides with the model.
+
 ## Run it yourself
 
     make setup        # Python 3.12 environment with pinned versions
@@ -306,7 +346,21 @@ Where it is wrong:
     make baselines    # majority, keyword rules, TF-IDF + SVM
     make test         # unit tests and the README check, also run in CI
 
-The GPU stages (train, merge, llm-eval, bench, backlog) run on a rented pod. Their commands and pinned environments are in [docs/DESIGN.md](docs/DESIGN.md) and requirements/. Every run writes a run.json with its seed, config, git commit and package versions.
+The GPU stages run on a rented pod. Pinned environments are in [docs/DESIGN.md](docs/DESIGN.md) and requirements/. Every run writes a run.json with its seed, config, git commit and package versions.
+
+GPU stages
+
+    python -m cve2cwe train --seed 1
+    python -m cve2cwe merge --adapter ADAPTER --out OUT
+    scripts/serve.sh MODEL
+    python -m cve2cwe llm-eval --system candidate --split dev --model MODEL --name NAME
+    python -m cve2cwe frontier --model sonnet --system retrieval
+    python -m cve2cwe gate --prepare
+    python -m cve2cwe gate
+    python -m cve2cwe bench --model MODEL
+    python -m cve2cwe backlog
+    python -m cve2cwe report
+    python -m cve2cwe demo
 
 ## Honest limits
 

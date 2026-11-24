@@ -651,6 +651,12 @@ def fmt_usd(value: float) -> str:
     return f"{sign}${format(rounded, 'f')}"
 
 
+def _list_usd(value: float) -> str:
+    """A list price quoted to the cent, which is how the pricing page writes it."""
+    dec = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"${format(dec, 'f')}"
+
+
 def fmt_sig(value: float, digits: int = 4) -> str:
     dec = Decimal(str(value))
     if dec == 0:
@@ -1029,6 +1035,8 @@ def _block_headline(
             "have no CWE from NVD, the vendor or CISA"
         )
     n_seeds = len(seeds)
+    zero = float(_one_result("qwen35_4b_zero_shot", "test")["metrics"]["accuracy"])
+    retrieved = float(_one_result("qwen35_4b_retrieval", "test")["metrics"]["accuracy"])
     return "\n".join(
         [
             (
@@ -1037,6 +1045,12 @@ def _block_headline(
                 f"The best baseline, {baseline}, scores {fmt_pct(champ['accuracy'])}. "
                 f"The best Claude run, {best_phrase}, scores {fmt_pct(best_acc)}. "
                 f"The pass line was {fmt_pct(gate['g1_pass_line'])}."
+            ),
+            (
+                "- **What fine-tuning added.** The same base model scores "
+                f"{fmt_pct(zero)} zero-shot and {fmt_pct(retrieved)} with retrieved "
+                "examples on test. Fine-tuned, it scores "
+                f"{fmt_pct(gate['mean_accuracy'])}."
             ),
             (
                 f"- **{seed_lead}** Gains over the best baseline: {gains} points, "
@@ -1365,8 +1379,17 @@ def _block_main(gate: dict, gate_cfg: dict) -> str:
         ["System", "Dev accuracy", "Test accuracy", "Test invalid rate", "Test macro-F1"],
         rows,
     )
+    seed_accs = [float(by_system[system]["metrics"]["accuracy"]) for system in chosen]
+    if len(chosen) != 3:
+        raise SystemExit(f"report: expected three seeds, found {len(chosen)}")
+    spread = (
+        "Spread across the three seeds: "
+        f"{fmt_pct(min(seed_accs))} to {fmt_pct(max(seed_accs))}."
+    )
     return (
         table
+        + "\n\n"
+        + spread
         + "\n\nClaude runs are test only. The mean of the seeds has no stored interval."
     )
 
@@ -1405,6 +1428,46 @@ def _block_slices(analysis: dict) -> str:
         ["CISA absent", _n("adp_empty_n"), *[_rate(item, "adp_empty") for item in systems]],
     ]
     return _md(headers, rows)
+
+
+def _block_perclass(analysis: dict) -> str:
+    """Recall for classes the error analysis kept. The static intro says 20."""
+    minimum = int(analysis["per_class_min_support"])
+    if minimum != 20:
+        raise SystemExit(
+            f"report: per-class support minimum is {minimum}, the README says 20"
+        )
+    names = {
+        row["id"]: row["name"]
+        for row in json.loads((REPO_ROOT / "data" / "processed" / "labels.json").read_text())
+    }
+    kept = [item for item in analysis["per_class_recall"] if int(item["support"]) >= minimum]
+    if not kept:
+        raise SystemExit("report: no per-class rows at the support minimum")
+    rows = []
+    for item in kept:
+        cwe = item["cwe"]
+        if cwe not in names:
+            raise SystemExit(f"report: {cwe} has no name in labels.json")
+        rows.append(
+            [
+                cwe,
+                names[cwe],
+                fmt_count(int(item["support"])),
+                fmt_pct(item["candidate_recall"]),
+                fmt_pct(item["champion_recall"]),
+            ]
+        )
+    return _md(
+        [
+            "CWE",
+            "Name",
+            "Test records",
+            "Recall of the shipped checkpoint",
+            "Recall of the champion",
+        ],
+        rows,
+    )
 
 
 def _block_routing(view: dict, gate_cfg: dict) -> str:
@@ -1486,6 +1549,24 @@ def _block_cost(routing: dict, view: dict, gate_cfg: dict, bench: dict) -> str:
             else "There is no break-even volume to compare."
         )
     month_hours = fmt_count(int(serve_cfg["hours_per_month"]))
+    systems_cfg = _load_yaml(REPO_ROOT / "configs" / "systems.yaml")
+    prices = systems_cfg["claude_prices"]
+    price_names = {"haiku_5_5": "Haiku 5.5", "sonnet_5_5": "Sonnet 5.5"}
+    price_bits = []
+    for key in ("haiku_5_5", "sonnet_5_5"):
+        if key not in prices:
+            raise SystemExit(f"report: claude price missing for {key}")
+        block = prices[key]
+        price_bits.append(
+            f"{price_names[key]} {_list_usd(block['input_usd_per_mtok'])} input and "
+            f"{_list_usd(block['output_usd_per_mtok'])} output"
+        )
+    list_prices = (
+        "Claude list prices per million tokens, read on "
+        f"{prices['price_read_on']}: "
+        + "; ".join(price_bits)
+        + f". Source: {prices['url']}."
+    )
     note = (
         f"Break-even is the monthly volume at which a GPU left on for {fmt_sig(hours, 3)} "
         f"hours at {fmt_usd(price)} per hour costs the same as that Claude run. "
@@ -1501,6 +1582,8 @@ def _block_cost(routing: dict, view: dict, gate_cfg: dict, bench: dict) -> str:
         + _md(["Claude run", "Break-even records per month"], even_rows)
         + "\n\n"
         + note
+        + "\n\n"
+        + list_prices
     )
 
 
@@ -1721,6 +1804,7 @@ _README_BLOCKS = (
     "table:gate",
     "table:main",
     "table:slices",
+    "table:perclass",
     "table:routing",
     "table:cost",
     "table:backlog",
@@ -1747,6 +1831,7 @@ def _readme_blocks() -> dict[str, str]:
         "table:gate": _block_gate(gate),
         "table:main": _block_main(gate, gate_cfg),
         "table:slices": _block_slices(analysis),
+        "table:perclass": _block_perclass(analysis),
         "table:routing": _block_routing(view, gate_cfg),
         "table:cost": _block_cost(routing, view, gate_cfg, _bench),
         "table:backlog": _block_backlog(),
@@ -1778,6 +1863,7 @@ def _fill_readme(text: str, blocks: dict[str, str]) -> str:
 
 def write_readme() -> int:
     _fix_cpu_routing_cost()
+    _redraw_loss_from_csv()
     path = REPO_ROOT / "README.md"
     path.write_text(_fill_readme(path.read_text(), _readme_blocks()))
     print("[report] wrote README.md")
@@ -1833,21 +1919,87 @@ def _wandb(query: str, variables: dict | None, key: str) -> dict:
     return doc["data"]
 
 
-def export_curves() -> int:
-    """Train and dev loss for the six full runs, from the W&B history API."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
-    folders = [
+def _curve_folders(gate_cfg: dict) -> list[str]:
+    return [
         name.removeprefix("candidate_")
         for name in (
             gate_cfg["candidate"]["one_epoch_systems"]
             + gate_cfg["candidate"]["two_epoch_systems"]
         )
     ]
+
+
+def _curve_label(folder: str) -> str:
+    run = json.loads((REPO_ROOT / "outputs" / "train" / folder / "run.json").read_text())
+    epochs = int(run["full_config"]["num_train_epochs"])
+    return _training_name(folder, epochs)
+
+
+def _plot_loss(series: dict[str, list[dict]]) -> None:
+    """Draw results/curves/loss.png. Labels match the README training table."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for folder, rows in series.items():
+        label = _curve_label(folder)
+        train = [(row["step"], row["train_loss"]) for row in rows if row["train_loss"] is not None]
+        dev = [(row["step"], row["eval_loss"]) for row in rows if row["eval_loss"] is not None]
+        axes[0].plot([step for step, _ in train], [value for _, value in train], label=label)
+        axes[1].plot(
+            [step for step, _ in dev],
+            [value for _, value in dev],
+            marker="o",
+            label=label,
+        )
+    axes[0].set_title("Train loss")
+    axes[1].set_title("Dev loss")
+    for axis in axes:
+        axis.set_xlabel("Step")
+        axis.legend(fontsize=8)
+    fig.tight_layout()
+    png = REPO_ROOT / "results" / "curves" / "loss.png"
+    fig.savefig(png)
+    plt.close(fig)
+    print(f"[report] wrote {png}")
+
+
+def _csv_loss(value: str) -> float | None:
+    if value == "":
+        return None
+    return float(value)
+
+
+def _redraw_loss_from_csv() -> None:
+    """Redraw the loss chart from the stored CSVs. Does not call W&B."""
+    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
+    series: dict[str, list[dict]] = {}
+    for folder in _curve_folders(gate_cfg):
+        path = REPO_ROOT / "results" / "curves" / f"{folder}.csv"
+        if not path.is_file():
+            raise SystemExit(f"report: missing loss curve {path}")
+        rows = []
+        with path.open(newline="") as handle:
+            for row in csv.DictReader(handle):
+                rows.append(
+                    {
+                        "step": int(row["step"]),
+                        "train_loss": _csv_loss(row["train_loss"]),
+                        "eval_loss": _csv_loss(row["eval_loss"]),
+                    }
+                )
+        if not rows:
+            raise SystemExit(f"report: {path} has no rows")
+        series[folder] = rows
+    _plot_loss(series)
+
+
+def export_curves() -> int:
+    """Train and dev loss for the six full runs, from the W&B history API."""
+    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
+    folders = _curve_folders(gate_cfg)
     key = _wandb_key()
     out_dir = REPO_ROOT / "results" / "curves"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1891,21 +2043,7 @@ def export_curves() -> int:
         series[folder] = rows
         print(f"[report] wrote {path} ({len(rows)} rows)")
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for folder, rows in series.items():
-        train = [(row["step"], row["train_loss"]) for row in rows if row["train_loss"] is not None]
-        dev = [(row["step"], row["eval_loss"]) for row in rows if row["eval_loss"] is not None]
-        axes[0].plot([s for s, _ in train], [v for _, v in train], label=folder)
-        axes[1].plot([s for s, _ in dev], [v for _, v in dev], marker="o", label=folder)
-    axes[0].set_title("Train loss")
-    axes[1].set_title("Dev loss")
-    for axis in axes:
-        axis.set_xlabel("Step")
-        axis.legend(fontsize=8)
-    fig.tight_layout()
-    png = out_dir / "loss.png"
-    fig.savefig(png)
-    print(f"[report] wrote {png}")
+    _plot_loss(series)
     return 0
 
 
