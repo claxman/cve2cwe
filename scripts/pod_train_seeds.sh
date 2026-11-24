@@ -30,9 +30,21 @@ if [ ! -d "$FROZEN" ]; then
         --exclude '.pytest_cache/' \
         --exclude '.ruff_cache/' \
         "$LIVE/" "$FROZEN/"
+    # Reset the frozen tree to HEAD. The live tree's outputs/ and results/
+    # are excluded from the Mac's push, so their pod-side copies drift from
+    # the committed versions; checking out from .git restores every tracked
+    # file so git_dirty is false at training start.
+    (cd "$FROZEN" && git checkout --quiet -- .)
     echo "pod_train_seeds: froze $LIVE -> $FROZEN"
 else
     echo "pod_train_seeds: reusing existing $FROZEN"
+fi
+
+# Confirm the frozen tree is clean before launching anything.
+if ! git -C "$FROZEN" diff-index --quiet HEAD --; then
+    echo "pod_train_seeds: frozen tree $FROZEN is dirty after reset; aborting:" >&2
+    git -C "$FROZEN" status --short >&2
+    exit 2
 fi
 
 # Re-install the editable package so `python -m cve2cwe` resolves to the

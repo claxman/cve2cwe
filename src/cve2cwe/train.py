@@ -397,20 +397,20 @@ def _make_sft_config(
 # Loss-mask printout.
 
 
-def _print_loss_carrying_tokens(label_name: str, tokenizer, trainer, example_text: str) -> str:
-    """Print the decoded tokens that carry loss for one rendered example."""
+def _print_loss_carrying_tokens(label_name: str, tokenizer, dataset, index: int = 0) -> str:
+    """Print the decoded tokens that carry loss for one prepared example.
+
+    Reads `input_ids` and `labels` from the SFTTrainer-prepared dataset. The
+    `labels` column was written by Unsloth's `train_on_responses_only`
+    `dataset.map`, so tokens outside the response span are -100."""
     text_tok = _text_tokenizer(tokenizer)
-    # Use the trainer's data collator to get labels with -100 on masked tokens.
-    tokenised = text_tok(example_text, add_special_tokens=False, return_tensors=None)
-    features = [
-        {
-            "input_ids": tokenised["input_ids"],
-            "attention_mask": tokenised["attention_mask"],
-        }
-    ]
-    batch_out = trainer.data_collator(features)
-    labels = batch_out["labels"][0].tolist()
-    input_ids = batch_out["input_ids"][0].tolist()
+    row = dataset[index]
+    input_ids = list(row["input_ids"])
+    labels = list(row["labels"])
+    if len(input_ids) != len(labels):
+        raise AssertionError(
+            f"input_ids ({len(input_ids)}) and labels ({len(labels)}) differ in length"
+        )
     kept = [tid for tid, lid in zip(input_ids, labels, strict=True) if lid != -100]
     decoded = text_tok.decode(kept)
     print(f"\n=== loss-carrying tokens ({label_name}) ===")
@@ -736,10 +736,10 @@ def mode_seed(seed: int) -> int:
     epoch_saver.model = trainer.model  # update after unsloth may wrap
 
     # Loss mask printouts for one train and one dev example.
-    sample_train_text = train_ds[0]["text"]
-    sample_dev_text = dev_ds[0]["text"]
-    _print_loss_carrying_tokens("train[0]", tokenizer, trainer, sample_train_text)
-    _print_loss_carrying_tokens("dev[0]", tokenizer, trainer, sample_dev_text)
+    # trainer.train_dataset / eval_dataset are the prepared, masked datasets
+    # that train_on_responses_only set up via dataset.map.
+    _print_loss_carrying_tokens("train[0]", tokenizer, trainer.train_dataset, 0)
+    _print_loss_carrying_tokens("dev[0]", tokenizer, trainer.eval_dataset, 0)
 
     torch.cuda.reset_peak_memory_stats()
     t_train = time.time()
