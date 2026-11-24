@@ -129,7 +129,7 @@ Mean dev accuracy, 1 epoch: 88.5%. 2 epochs: 88.8%. Chosen length: 2 epochs.
 
 ![Train and dev loss](results/curves/loss.png)
 
-Runs were tracked in Weights & Biases. That project stays private, because W&B stores the account email in each run's metadata and config. The loss values are exported to results/curves/ and plotted above.
+Runs are tracked in Weights & Biases: https://wandb.ai/chaitanyalaxman118-chaitanya-personal/cve2cwe
 
 ## Inference
 
