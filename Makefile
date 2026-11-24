@@ -13,6 +13,7 @@ lint:
 
 test:
 	$(PY) -m pytest
+	$(PY) -m cve2cwe report --check
 
 data:
 	$(PY) -m cve2cwe data

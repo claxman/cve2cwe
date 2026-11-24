@@ -32,12 +32,18 @@ click==8.5.1
     #   uvicorn
 cloudpickle==3.1.3
     # via joblib
+contourpy==1.4.0
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
 docstring-parser==0.18.0
     # via anthropic
 fastapi==0.165.0
     # via gradio
 filelock==4.3.1
     # via huggingface-hub
+fonttools==4.68.0
+    # via matplotlib
 fsspec==2026.9.0
     # via
     #   gradio-client
@@ -96,12 +102,16 @@ jiter==0.19.0
     #   openai
 joblib==1.6.0
     # via scikit-learn
+kiwisolver==1.5.1
+    # via matplotlib
 markdown-it-py==4.3.0
     # via rich
 markupsafe==3.0.4
     # via
     #   gradio
     #   jinja2
+matplotlib==3.11.2
+    # via -r requirements/base.in
 mdurl==0.1.2
     # via markdown-it-py
 narwhals==2.29.0
@@ -109,7 +119,9 @@ narwhals==2.29.0
 numpy==2.5.5
     # via
     #   -r requirements/base.in
+    #   contourpy
     #   gradio
+    #   matplotlib
     #   pandas
     #   scikit-learn
     #   scipy
@@ -126,11 +138,14 @@ packaging==26.3
     #   gradio
     #   gradio-client
     #   huggingface-hub
+    #   matplotlib
     #   pytest
 pandas==3.1.1
     # via gradio
 pillow==13.0.0
-    # via gradio
+    # via
+    #   gradio
+    #   matplotlib
 pluggy==1.7.0
     # via pytest
 pydantic==2.14.4
@@ -148,10 +163,14 @@ pygments==2.21.0
     # via
     #   pytest
     #   rich
+pyparsing==3.3.3
+    # via matplotlib
 pytest==9.2.0
     # via -r requirements/base.in
 python-dateutil==4.0.0
-    # via pandas
+    # via
+    #   matplotlib
+    #   pandas
 python-multipart==0.0.34
     # via gradio
 pytz==2026.6

@@ -66,9 +66,10 @@
           "cascade_accuracy": 0.735657546337158,
           "threshold": 0.5249350643900713,
           "cost_per_1000_usd": {
-            "small_only": 0.013302520044043196,
+            "small_only": null,
             "claude_only": 5.000064430714915,
-            "cascade": 1.9285963972993594
+            "cascade": null,
+            "note": "CPU, not measured"
           }
         },
         "at_0.97": {
@@ -81,9 +82,10 @@
           "cascade_accuracy": 0.7246248896734334,
           "threshold": 0.9941718718366617,
           "cost_per_1000_usd": {
-            "small_only": 0.013302520044043196,
+            "small_only": null,
             "claude_only": 5.000064430714915,
-            "cascade": 2.870797417562055
+            "cascade": null,
+            "note": "CPU, not measured"
           }
         }
       }

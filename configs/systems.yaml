@@ -5,6 +5,18 @@
 
 max_description_chars: 2000
 
+# TF-IDF baselines. The word branch is also the retrieval table. C is chosen
+# on dev from c_values; a tie keeps the smaller C.
+tfidf:
+  word_ngram_range: [1, 2]
+  word_min_df: 2
+  char_wb_ngram_range: [3, 5]
+  char_min_df: 3
+  sublinear_tf: true
+  lowercase: true
+  c_values: [0.25, 0.5, 1.0]
+  retrieval_batch: 256
+
 # LLM baseline prompt shaping (DESIGN section 6, systems 4-6; Step 7).
 # These numbers go in the run.json of every LLM evaluation so a reader can
 # reconstruct the prompts from the prediction file alone.

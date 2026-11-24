@@ -140,20 +140,20 @@ def predict_keyword(
 # TF-IDF + LinearSVC baseline.
 
 
-def _make_tfidf_union() -> FeatureUnion:
-    """Word 1-2 grams (min_df=2) plus char_wb 3-5 grams (min_df=3)."""
+def _make_tfidf_union(cfg: dict) -> FeatureUnion:
+    """Word n-grams plus char_wb n-grams. The ranges live in systems.yaml."""
     word_vec = TfidfVectorizer(
-        ngram_range=(1, 2),
-        min_df=2,
-        sublinear_tf=True,
-        lowercase=True,
+        ngram_range=tuple(cfg["word_ngram_range"]),
+        min_df=cfg["word_min_df"],
+        sublinear_tf=bool(cfg["sublinear_tf"]),
+        lowercase=bool(cfg["lowercase"]),
         analyzer="word",
     )
     char_vec = TfidfVectorizer(
-        ngram_range=(3, 5),
-        min_df=3,
-        sublinear_tf=True,
-        lowercase=True,
+        ngram_range=tuple(cfg["char_wb_ngram_range"]),
+        min_df=cfg["char_min_df"],
+        sublinear_tf=bool(cfg["sublinear_tf"]),
+        lowercase=bool(cfg["lowercase"]),
         analyzer="char_wb",
     )
     return FeatureUnion([("word", word_vec), ("char", char_vec)])
@@ -164,12 +164,13 @@ def fit_tfidf_svm(
     dev_rows: list[dict],
     c_values: list[float],
     seed: int,
+    tfidf_cfg: dict,
 ) -> tuple[FeatureUnion, LinearSVC, float, dict[float, float]]:
     """Fit features on train, grid-search C on dev accuracy. Returns the
     fitted vectorizer, the SVM at the chosen C, that C, and every C's dev
     accuracy for the run.json log.
     """
-    union = _make_tfidf_union()
+    union = _make_tfidf_union(tfidf_cfg)
     X_train = union.fit_transform([r["description"] for r in train_rows])
     y_train = np.array([r["label"] for r in train_rows])
     X_dev = union.transform([r["description"] for r in dev_rows])
@@ -225,6 +226,7 @@ def build_retrieval_tables(
     other_splits: dict[str, list[dict]],
     k: int,
     out_dir: Path,
+    tfidf_cfg: dict,
 ) -> dict[str, Path]:
     """Write ``outputs/retrieval/<split>.jsonl`` with the top-k train
     neighbours by cosine similarity on word 1-2 gram TF-IDF vectors.
@@ -232,10 +234,10 @@ def build_retrieval_tables(
     Only descriptions are used, never a dev or test label.
     """
     word_vec = TfidfVectorizer(
-        ngram_range=(1, 2),
-        min_df=2,
-        sublinear_tf=True,
-        lowercase=True,
+        ngram_range=tuple(tfidf_cfg["word_ngram_range"]),
+        min_df=tfidf_cfg["word_min_df"],
+        sublinear_tf=bool(tfidf_cfg["sublinear_tf"]),
+        lowercase=bool(tfidf_cfg["lowercase"]),
         analyzer="word",
     )
     X_train = word_vec.fit_transform([r["description"] for r in train_rows])
@@ -248,7 +250,7 @@ def build_retrieval_tables(
         X = word_vec.transform([r["description"] for r in rows])
         X_n = normalize(X)
         path = out_dir / f"{split}.jsonl"
-        batch = 256
+        batch = int(tfidf_cfg["retrieval_batch"])
         with path.open("w", encoding="utf-8") as f:
             for start in range(0, X_n.shape[0], batch):
                 end = min(start + batch, X_n.shape[0])
@@ -347,9 +349,10 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     # ---- TF-IDF SVM ----
     print("[baselines] tfidf_svm: fit + C grid on dev")
     t0 = time.perf_counter()
-    c_values = [0.25, 0.5, 1.0]
+    tfidf_cfg = systems_cfg["tfidf"]
+    c_values = [float(c) for c in tfidf_cfg["c_values"]]
     union, svm, best_c, dev_scores_by_c = fit_tfidf_svm(
-        train_rows, dev_rows, c_values, SEED
+        train_rows, dev_rows, c_values, SEED, tfidf_cfg
     )
     fit_t_svm = time.perf_counter() - t0
     print(
@@ -428,12 +431,12 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
                 "c_values": c_values,
                 "dev_scores_by_c": {str(c): dev_scores_by_c[c] for c in c_values},
                 "best_c": best_c,
-                "word_ngram_range": [1, 2],
-                "word_min_df": 2,
-                "char_wb_ngram_range": [3, 5],
-                "char_min_df": 3,
-                "sublinear_tf": True,
-                "lowercase": True,
+                "word_ngram_range": list(tfidf_cfg["word_ngram_range"]),
+                "word_min_df": tfidf_cfg["word_min_df"],
+                "char_wb_ngram_range": list(tfidf_cfg["char_wb_ngram_range"]),
+                "char_min_df": tfidf_cfg["char_min_df"],
+                "sublinear_tf": bool(tfidf_cfg["sublinear_tf"]),
+                "lowercase": bool(tfidf_cfg["lowercase"]),
                 "classifier": "LinearSVC",
                 "max_description_chars": max_chars,
             },
@@ -457,8 +460,9 @@ def run(outputs_root: Path | None = None, results_root: Path | None = None) -> i
     build_retrieval_tables(
         train_rows,
         {"dev": dev_rows, "test": test_rows},
-        k=5,
+        k=int(systems_cfg["retrieval"]["num_examples"]),
         out_dir=retrieval_dir,
+        tfidf_cfg=tfidf_cfg,
     )
     print(f"[baselines] retrieval: wrote {retrieval_dir} in {time.perf_counter() - t0:.2f}s")
 

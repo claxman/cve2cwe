@@ -21,3 +21,5 @@ jobs:
         run: ruff check .
       - name: Pytest
         run: pytest
+      - name: README check
+        run: python -m cve2cwe report --check

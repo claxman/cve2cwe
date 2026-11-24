@@ -1,0 +1,30 @@
+{
+  "stage": "demo_check",
+  "run_id": "20261124T170118Z-79fe926",
+  "seed": 20261124,
+  "n": 200,
+  "git_commit": "79fe926e67ca1aa7ed3005b12f9426a965eafbe7",
+  "git_dirty": false,
+  "package_versions": {
+    "numpy": "2.5.5",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "pyyaml": "6.0.4"
+  },
+  "started_utc": "2026-11-24T17:01:18Z",
+  "finished_utc": "2026-11-24T17:03:19Z",
+  "summary": {
+    "run_id": "20261124T170118Z-79fe926",
+    "n": 200,
+    "seed": 20261124,
+    "n_agree_with_bf16": 197,
+    "agreement_with_bf16": 0.985,
+    "n_correct": 176,
+    "accuracy": 0.88,
+    "n_with_confidence": 200,
+    "bf16_prediction_dir": "results/candidate_e2-seed1/dev",
+    "model": "candidate-e2-seed1",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "note": "This server is the Q4_K_M GGUF. Reported scores in the README come from the bf16 checkpoint."
+  }
+}

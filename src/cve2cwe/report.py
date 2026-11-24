@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
+import subprocess
+import sys
 from collections import Counter
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import yaml
@@ -18,6 +22,7 @@ from cve2cwe.scorer import _read_jsonl, compute_metrics, load_label_set, parse
 _CWE_ID = re.compile(r"CWE-[0-9]+")
 _CLEAN_ID = re.compile(r"^CWE-[0-9]+$")
 _CPU_SYSTEMS = {"majority", "keyword", "tfidf_svm"}
+_CPU_COST_NOTE = "CPU, not measured"
 
 # Reason labels for an output the scorer rejected. parse() is unchanged;
 # this only describes why it returned None.
@@ -427,13 +432,23 @@ def write_routing() -> None:
             ]
             row = routing_row(correct, correct_fallback, auto)
             row["threshold"] = threshold
-            row["cost_per_1000_usd"] = {
-                "small_only": small_per_1000,
-                "claude_only": best_per_1000,
-                "cascade": cascade_cost_per_1000(
-                    small_per_1000, best_per_1000, row["auto_label_rate"]
-                ),
-            }
+            # The linear model runs on CPU. The GPU figure is the fine-tuned
+            # checkpoint only, so it is not stored against tfidf_svm.
+            if name in _CPU_SYSTEMS:
+                row["cost_per_1000_usd"] = {
+                    "small_only": None,
+                    "claude_only": best_per_1000,
+                    "cascade": None,
+                    "note": _CPU_COST_NOTE,
+                }
+            else:
+                row["cost_per_1000_usd"] = {
+                    "small_only": small_per_1000,
+                    "claude_only": best_per_1000,
+                    "cascade": cascade_cost_per_1000(
+                        small_per_1000, best_per_1000, row["auto_label_rate"]
+                    ),
+                }
             block[key] = row
         systems_out[name] = {
             "prediction_dir": result["prediction_dir"],
@@ -610,20 +625,1008 @@ def write_spend() -> None:
     )
 
 
+def fmt_pct(value: float) -> str:
+    """One decimal place. 0.7590... is 75.9%."""
+    return f"{100.0 * value:.1f}%"
+
+
+def fmt_points(value: float) -> str:
+    """An accuracy difference, in percentage points, with a sign."""
+    return f"{100.0 * value:+.1f}"
+
+
+def fmt_count(value: int) -> str:
+    return f"{value:,}"
+
+
+def fmt_usd(value: float) -> str:
+    """Three significant digits, half up."""
+    dec = Decimal(str(value))
+    if dec == 0:
+        return "$0.00"
+    sign = "-" if dec < 0 else ""
+    dec = abs(dec)
+    quantum = Decimal(f"1e{dec.adjusted() - 2}")
+    rounded = dec.quantize(quantum, rounding=ROUND_HALF_UP)
+    return f"{sign}${format(rounded, 'f')}"
+
+
+def fmt_sig(value: float, digits: int = 4) -> str:
+    dec = Decimal(str(value))
+    if dec == 0:
+        return "0"
+    sign = "-" if dec < 0 else ""
+    dec = abs(dec)
+    quantum = Decimal(f"1e{dec.adjusted() - (digits - 1)}")
+    rounded = dec.quantize(quantum, rounding=ROUND_HALF_UP)
+    return sign + format(rounded, "f")
+
+
+def _md(headers: list[str], rows: list[list[str]]) -> str:
+    head = "| " + " | ".join(headers) + " |"
+    rule = "|" + "|".join("---" for _ in headers) + "|"
+    body = ["| " + " | ".join(row) + " |" for row in rows]
+    return "\n".join([head, rule, *body])
+
+
+def _cve_link(cve_id: str) -> str:
+    return f"[{cve_id}](https://nvd.nist.gov/vuln/detail/{cve_id})"
+
+
+def _one_result(system: str, split: str) -> dict:
+    paths = sorted((REPO_ROOT / "results" / system / split).glob("*.json"))
+    if len(paths) != 1:
+        raise SystemExit(f"report: {system} {split} has {len(paths)} result files")
+    return json.loads(paths[0].read_text())
+
+
+def _test_results() -> list[dict]:
+    out = []
+    root = REPO_ROOT / "results"
+    for path in sorted(root.glob("*/test/*.json")):
+        if path.parent.parent.name == "paired":
+            continue
+        out.append(json.loads(path.read_text()))
+    return out
+
+
+def _dev_accuracy(system: str) -> float | None:
+    folder = REPO_ROOT / "results" / system / "dev"
+    if not folder.is_dir():
+        return None
+    return float(_one_result(system, "dev")["metrics"]["accuracy"])
+
+
+def _n_invalid(system: str, run_id: str) -> int:
+    path = REPO_ROOT / "outputs" / system / "test" / run_id / "predictions.jsonl"
+    return sum(1 for row in _read_jsonl(path) if row.get("parsed") is None)
+
+
+def _acceptance() -> tuple[str, str]:
+    """Commit that set the acceptance file to final, and its UTC time."""
+    proc = subprocess.run(
+        [
+            "git",
+            "log",
+            "-S",
+            "Status: final",
+            "--reverse",
+            "--format=%H%x09%cI",
+            "--",
+            "docs/ACCEPTANCE.md",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    sha, iso = proc.stdout.splitlines()[0].split("\t")
+    stamp = datetime.fromisoformat(iso).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return sha, stamp
+
+
+def _first_candidate_test_utc(gate: dict) -> str:
+    times = []
+    for seed in gate["seeds"]:
+        path = (
+            REPO_ROOT
+            / "outputs"
+            / seed["system"]
+            / "test"
+            / seed["run_id"]
+            / "run.json"
+        )
+        times.append(json.loads(path.read_text())["started_utc"])
+    return min(times)
+
+
+def _fix_cpu_routing_cost() -> None:
+    """Drop the GPU price from the linear model without rewriting other fields.
+
+    A full json dump would reformat every float in the file. This replaces
+    only the two tfidf cost objects and leaves the recorded git commit as it was.
+    """
+    path = REPO_ROOT / "results" / "routing.json"
+    text = path.read_text()
+    start = text.index('"tfidf_svm"')
+    end = text.index('"claude_costs"')
+    mid = text[start:end]
+    if mid.count(f'"note": "{_CPU_COST_NOTE}"') == 2 and '"small_only": null' in mid:
+        return
+    pattern = re.compile(
+        r'"cost_per_1000_usd": \{\n'
+        r'            "small_only": [0-9.eE+-]+,\n'
+        r'            "claude_only": ([0-9.eE+-]+),\n'
+        r'            "cascade": [0-9.eE+-]+\n'
+        r"          \}"
+    )
+
+    def _repl(match: re.Match) -> str:
+        claude = match.group(1)
+        return (
+            '"cost_per_1000_usd": {\n'
+            '            "small_only": null,\n'
+            f'            "claude_only": {claude},\n'
+            '            "cascade": null,\n'
+            f'            "note": "{_CPU_COST_NOTE}"\n'
+            "          }"
+        )
+
+    new_mid, n = pattern.subn(_repl, mid)
+    if n != 2:
+        raise SystemExit(f"report: expected 2 tfidf cost blocks, rewrote {n}")
+    path.write_text(text[:start] + new_mid + text[end:])
+    print("[report] updated tfidf costs in results/routing.json")
+
+
+def _route_view(gate_cfg: dict, routing: dict) -> dict:
+    """Test routing rows plus Claude accuracy on the records left over.
+
+    The stored row is checked against a fresh pass over the prediction files.
+    """
+    rows = _read_jsonl(REPO_ROOT / "data" / "processed" / "test.jsonl")
+    dev_rows = _read_jsonl(REPO_ROOT / "data" / "processed" / "dev.jsonl")
+    best_name = routing["best_claude"]
+    best_doc = _one_result(best_name, "test")
+    correct_fallback = _correct(_aligned(_prediction_dir(best_doc), rows), rows)
+    shipped = gate_cfg["candidate"]["shipped"]
+    names = (shipped, gate_cfg["champion"]["system"])
+    out = {}
+    for name in names:
+        result = _one_result(name, "test")
+        preds = _aligned(_prediction_dir(result), rows)
+        correct = _correct(preds, rows)
+        dev_result = _one_result(name, "dev")
+        dev_preds = _aligned(_prediction_dir(dev_result), dev_rows)
+        dev_correct = _correct(dev_preds, dev_rows)
+        thresholds = {}
+        for key, spec in gate_cfg["routing"][name].items():
+            if not str(key).startswith("at_"):
+                continue
+            threshold = float(spec["threshold"])
+            auto = [
+                p.get("confidence") is not None and float(p["confidence"]) >= threshold
+                for p in preds
+            ]
+            fresh = routing_row(correct, correct_fallback, auto)
+            stored = routing["systems"][name]["thresholds"][key]
+            if fresh["n_auto"] != stored["n_auto"] or fresh["n_rest"] != stored["n_rest"]:
+                raise SystemExit(f"report: {name} {key} does not match routing.json")
+            n_rest = fresh["n_rest"]
+            claude_rest = sum(
+                c for c, flag in zip(correct_fallback, auto, strict=True) if not flag
+            )
+            dev_auto = [
+                p.get("confidence") is not None and float(p["confidence"]) >= threshold
+                for p in dev_preds
+            ]
+            dev_n_auto = sum(dev_auto)
+            dev_hit = sum(
+                c for c, flag in zip(dev_correct, dev_auto, strict=True) if flag
+            )
+            if dev_n_auto != int(spec["n"]) or dev_hit != int(spec["n_correct"]):
+                raise SystemExit(f"report: {name} {key} dev counts do not match gate.yaml")
+            thresholds[key] = {
+                "threshold": threshold,
+                "dev_coverage": dev_n_auto / len(dev_rows),
+                "dev_precision": dev_hit / dev_n_auto,
+                "auto_label_rate": fresh["auto_label_rate"],
+                "accuracy_auto": fresh["accuracy_auto"],
+                "accuracy_rest": fresh["accuracy_rest"],
+                "claude_rest": claude_rest / n_rest,
+                "cascade_accuracy": fresh["cascade_accuracy"],
+                "cost": stored["cost_per_1000_usd"],
+            }
+        out[name] = thresholds
+    return out
+
+
+def _block_headline(
+    gate: dict, gate_cfg: dict, routing: dict, view: dict, bench: dict
+) -> str:
+    champ = gate["champion"]
+    best = routing["best_claude"]
+    best_acc = routing["claude_costs"][best]["test_accuracy"]
+    shipped = gate_cfg["candidate"]["shipped"]
+    level = next(row for row in bench["levels"] if int(row["concurrency"]) == 32)
+    ship = view[shipped]["at_0.95"]
+    linear = view[gate["champion"]["system"]]["at_0.95"]
+    gains = []
+    musts = []
+    invalids = []
+    for seed in gate["seeds"]:
+        gains.append(
+            f"{seed['system']} {fmt_points(seed['paired_diff'])} points "
+            f"(lower bound {fmt_points(seed['paired_lo'])})"
+        )
+        musts.append(f"{fmt_count(seed['must_pass_correct'])}/{fmt_count(seed['must_pass_n'])}")
+        invalids.append(fmt_count(_n_invalid(seed["system"], seed["run_id"])))
+    summary, labels = _backlog_rows()
+    n95 = sum(1 for row in labels if row["auto_95"] == "True")
+    label_path = f"outputs/backlog/{summary['run_id']}/labels.csv"
+    return "\n".join(
+        [
+            (
+                f"- Verdict {gate['verdict']}. Fine-tuned mean test accuracy "
+                f"{fmt_pct(gate['mean_accuracy'])}. Champion {champ['system']} "
+                f"{fmt_pct(champ['accuracy'])}. Best Claude run {best} "
+                f"{fmt_pct(best_acc)}. Pass line {fmt_pct(gate['g1_pass_line'])}."
+            ),
+            (
+                "- Per-seed gains: "
+                + "; ".join(gains)
+                + f". Must-pass counts: {', '.join(musts)}. "
+                + f"Invalid outputs: {', '.join(invalids)}."
+            ),
+            (
+                f"- At the dev 95% threshold on test, {shipped} auto-labels "
+                f"{fmt_pct(ship['auto_label_rate'])} of records at "
+                f"{fmt_pct(ship['accuracy_auto'])} precision. "
+                f"{champ['system']} auto-labels {fmt_pct(linear['auto_label_rate'])} "
+                f"at {fmt_pct(linear['accuracy_auto'])} precision."
+            ),
+            (
+                f"- On the records {shipped} does not auto-label, its accuracy is "
+                f"{fmt_pct(ship['accuracy_rest'])} and {best} on those same records "
+                f"is {fmt_pct(ship['claude_rest'])}."
+            ),
+            (
+                f"- Cost per 1,000 records: {shipped} at concurrency 32 is "
+                f"{fmt_usd(level['cost_per_1000_usd'])}, and {best} is "
+                f"{fmt_usd(routing['claude_costs'][best]['cost_per_1000_usd'])}. "
+                f"Prices read on {bench['gpu']['price_read_utc']}."
+            ),
+            (
+                f"- Backlog: {fmt_count(summary['rows'])} rows in "
+                f"{summary['wall_seconds']:.2f} seconds, GPU cost "
+                f"{fmt_usd(summary['gpu_cost_usd'])}, "
+                f"{fmt_count(n95)} rows at or above the dev 95% threshold. "
+                f"[labels.csv]({label_path})."
+            ),
+        ]
+    )
+
+
+def _block_coverage(stats: dict) -> str:
+    cov = stats["coverage_pre_rule_2"]
+    rows = []
+    for year in sorted(key for key in cov if key != "test_window"):
+        block = cov[year]
+        rows.append(
+            [
+                year,
+                fmt_count(block["records"]),
+                fmt_pct(block["nvd_analyst_cwe_share"]),
+            ]
+        )
+    window = cov["test_window"]
+    sentence = (
+        f"In the test window, {fmt_pct(window['none_share'])} of "
+        f"{fmt_count(window['records'])} CVEs have no CWE from any source. "
+        f"{fmt_pct(window['none_kernel_share'])} of those are kernel CVEs."
+    )
+    table = _md(["Publication year", "Records", "NVD analyst CWE"], rows)
+    return table + "\n\n" + sentence
+
+
+def _block_data(stats: dict) -> str:
+    rows = []
+    for name in ("train", "dev", "test"):
+        block = stats["splits"][name]
+        start, end = block["date_range"]
+        rows.append(
+            [
+                name,
+                fmt_count(block["rows"]),
+                start,
+                end,
+                fmt_pct(block["kernel_share"]),
+            ]
+        )
+    funnel = stats["funnel"]
+    line = (
+        f"{fmt_count(funnel['rule_1_input'])} feed records, "
+        f"{fmt_count(funnel['rule_1_dropped_rejected'])} rejected, "
+        f"{fmt_count(funnel['rule_2_dropped_no_label'])} with no label, "
+        f"{fmt_count(funnel['rule_2_dropped_placeholder'])} placeholder, "
+        f"{fmt_count(funnel['rule_2_dropped_multi_label'])} with more than one CWE, "
+        f"{fmt_count(funnel['rule_2_kept'])} with a single NVD CWE, then "
+        f"{fmt_count(funnel['final_train'])} train, "
+        f"{fmt_count(funnel['final_dev'])} dev and "
+        f"{fmt_count(funnel['final_test'])} test."
+    )
+    test = stats["splits"]["test"]
+    near_bits = []
+    for key, value in stats["near_duplicate_test_to_train"].items():
+        cut = key.removeprefix("share_ge_").replace("_", ".")
+        near_bits.append(f"{fmt_pct(value)} at or above {cut}")
+    near = "Near-duplicate share of test against train: " + ", ".join(near_bits) + "."
+    adp = (
+        f"{fmt_pct(test['adp_nonempty_share'])} of test records have a CISA ADP label. "
+        f"Where CISA labelled the record, it agrees with NVD on "
+        f"{fmt_pct(test['adp_agree_share'])}."
+    )
+    table = _md(["Split", "Rows", "From", "To", "Kernel share"], rows)
+    return "\n\n".join(
+        [
+            table,
+            f"Label set size: {fmt_count(funnel['label_set_size'])}.",
+            line,
+            adp,
+            near,
+        ]
+    )
+
+
+def _block_training(gate_cfg: dict) -> str:
+    groups = (
+        ("1 epoch", gate_cfg["candidate"]["one_epoch_systems"]),
+        ("2 epochs", gate_cfg["candidate"]["two_epoch_systems"]),
+    )
+    rows = []
+    means = {}
+    for label, systems in groups:
+        accs = []
+        for system in systems:
+            folder = system.removeprefix("candidate_")
+            run = json.loads((REPO_ROOT / "outputs" / "train" / folder / "run.json").read_text())
+            dev_acc = _dev_accuracy(system)
+            if dev_acc is None:
+                raise SystemExit(f"report: {system} has no dev result")
+            accs.append(dev_acc)
+            minutes = float(run["training_seconds"]) / 60.0
+            last_loss = float(run["dev_losses"][-1]["loss"])
+            epochs = int(run["full_config"]["num_train_epochs"])
+            rows.append(
+                [folder, str(epochs), f"{minutes:.1f}", fmt_sig(last_loss), fmt_pct(dev_acc)]
+            )
+        means[label] = sum(accs) / len(accs)
+    one = means["1 epoch"]
+    two = means["2 epochs"]
+    chosen = 2 if two > one else 1
+    if int(gate_cfg["candidate"]["chosen_epochs"]) != chosen:
+        raise SystemExit("report: chosen length does not match the dev means")
+    table = _md(
+        ["Run", "Epochs", "Training minutes", "Last dev loss", "Dev accuracy"],
+        rows,
+    )
+    note = (
+        f"Mean dev accuracy, 1 epoch: {fmt_pct(one)}. "
+        f"2 epochs: {fmt_pct(two)}. Chosen length: {chosen} epochs."
+    )
+    return table + "\n\n" + note
+
+
+def _block_serving(bench: dict) -> str:
+    rows = []
+    for level in bench["levels"]:
+        rows.append(
+            [
+                str(level["concurrency"]),
+                fmt_sig(level["records_per_second"]),
+                fmt_sig(level["latency_ms_p50"]),
+                fmt_sig(level["latency_ms_p95"]),
+                fmt_usd(level["cost_per_1000_usd"]),
+            ]
+        )
+    gpu = bench["gpu"]
+    note = (
+        f"GPU: {gpu['name']}. Price {fmt_usd(gpu['price_usd_per_hour'])} per hour, "
+        f"read on {gpu['price_read_utc']}. {gpu['price_source']}."
+    )
+    table = _md(
+        ["Concurrency", "Records per second", "Latency p50 ms", "Latency p95 ms", "USD per 1,000"],
+        rows,
+    )
+    return table + "\n\n" + note
+
+
+def _block_gate(gate: dict) -> str:
+    seeds = gate["seeds"]
+    headers = ["Gate", "Bar", *[seed["system"] for seed in seeds]]
+    bar = gate["g1_pass_line"]
+
+    def _flag(ok: bool) -> str:
+        return "PASS" if ok else "FAIL"
+
+    g1 = ["G1 test accuracy", f">= {fmt_pct(bar)}"]
+    for seed in seeds:
+        g1.append(f"{fmt_pct(seed['accuracy'])} {_flag(seed['accuracy'] >= bar)}")
+    g2 = ["G2 invalid rate", f"<= {fmt_pct(gate['thresholds']['invalid'])}"]
+    for seed in seeds:
+        g2.append(f"{fmt_pct(seed['invalid_rate'])} {_flag(seed['g2'])}")
+    g3 = ["G3 must-pass", f">= {fmt_pct(gate['thresholds']['must_pass'])}"]
+    for seed in seeds:
+        g3.append(
+            f"{fmt_pct(seed['must_pass_accuracy'])} "
+            f"({fmt_count(seed['must_pass_correct'])}/{fmt_count(seed['must_pass_n'])}) "
+            f"{_flag(seed['g3'])}"
+        )
+    bound = float(gate["thresholds"]["paired_lower_bound_above"])
+    g4_bar = "above 0" if bound == 0 else f"above {fmt_points(bound)}"
+    g4 = ["G4 paired lower bound", g4_bar]
+    for seed in seeds:
+        g4.append(f"{fmt_points(seed['paired_lo'])} points {_flag(seed['g4'])}")
+    sha, when = _acceptance()
+    started = _first_candidate_test_utc(gate)
+    official = _flag(gate["g1"])
+    note = (
+        f"Mean test accuracy {fmt_pct(gate['mean_accuracy'])}. "
+        f"G1 on that mean: {official}. Verdict: {gate['verdict']}. "
+        f"Acceptance commit {sha} at {when}. "
+        f"First candidate test run started {started}."
+    )
+    return _md(headers, [g1, g2, g3, g4]) + "\n\n" + note
+
+
+def _acc_cell(acc: float, ci: list | None) -> str:
+    if not ci:
+        return fmt_pct(acc)
+    return f"{fmt_pct(acc)} ({fmt_pct(ci[0])} to {fmt_pct(ci[1])})"
+
+
+def _dev_cell(system: str) -> str:
+    acc = _dev_accuracy(system)
+    if acc is not None:
+        return fmt_pct(acc)
+    if system.startswith("claude_"):
+        return "test only"
+    return "not run"
+
+
+def _block_main(gate: dict, gate_cfg: dict) -> str:
+    chosen = list(gate_cfg["candidate"]["chosen_systems"])
+    shipped = gate_cfg["candidate"]["shipped"]
+    batched = [
+        doc["system"]
+        for doc in _test_results()
+        if doc["system"].startswith(shipped) and doc["system"].endswith("_batched")
+    ]
+    grouped = set(chosen) | set(batched)
+    others = []
+    by_system = {doc["system"]: doc for doc in _test_results()}
+    for doc in by_system.values():
+        if doc["system"] in grouped:
+            continue
+        others.append(doc)
+    others.sort(key=lambda doc: float(doc["metrics"]["accuracy"]), reverse=True)
+    mean_acc = float(gate["mean_accuracy"])
+    devs = [_dev_accuracy(system) for system in chosen]
+    if any(item is None for item in devs):
+        raise SystemExit("report: a chosen seed has no dev accuracy")
+    mean_dev = sum(devs) / len(devs)
+
+    def _row(
+        name: str, dev: str, acc: float, ci: list | None, invalid: float, f1: float
+    ) -> list[str]:
+        return [name, dev, _acc_cell(acc, ci), fmt_pct(invalid), fmt_pct(f1)]
+
+    invalid_mean = sum(
+        float(by_system[system]["metrics"]["invalid_rate"]) for system in chosen
+    ) / len(chosen)
+    block = [
+        _row(
+            "fine-tuned mean",
+            fmt_pct(mean_dev),
+            mean_acc,
+            None,
+            invalid_mean,
+            _mean_macro(chosen),
+        ),
+    ]
+    for system in chosen:
+        doc = by_system[system]
+        metrics = doc["metrics"]
+        block.append(
+            _row(
+                system,
+                _dev_cell(system),
+                metrics["accuracy"],
+                metrics["accuracy_ci95"],
+                metrics["invalid_rate"],
+                metrics["macro_f1"],
+            )
+        )
+    for system in batched:
+        doc = by_system[system]
+        metrics = doc["metrics"]
+        block.append(
+            _row(
+                system,
+                _dev_cell(system),
+                metrics["accuracy"],
+                metrics["accuracy_ci95"],
+                metrics["invalid_rate"],
+                metrics["macro_f1"],
+            )
+        )
+    rest = []
+    for doc in others:
+        metrics = doc["metrics"]
+        rest.append(
+            _row(
+                doc["system"],
+                _dev_cell(doc["system"]),
+                metrics["accuracy"],
+                metrics["accuracy_ci95"],
+                metrics["invalid_rate"],
+                metrics["macro_f1"],
+            )
+        )
+    insert = 0
+    while insert < len(rest):
+        system = rest[insert][0]
+        acc = float(by_system[system]["metrics"]["accuracy"])
+        if acc <= mean_acc:
+            break
+        insert += 1
+    rows = rest[:insert] + block + rest[insert:]
+    table = _md(
+        ["System", "Dev accuracy", "Test accuracy", "Test invalid rate", "Test macro-F1"],
+        rows,
+    )
+    return table + "\n\nClaude runs are test only. The fine-tuned mean has no stored interval."
+
+
+def _mean_macro(systems: list[str]) -> float:
+    docs = [_one_result(system, "test") for system in systems]
+    return sum(float(doc["metrics"]["macro_f1"]) for doc in docs) / len(docs)
+
+
+def _block_slices(analysis: dict) -> str:
+    order = ("candidate", "champion", "best_claude")
+    systems = [analysis["systems"][key] for key in order]
+    headers = ["Slice", "n", *[item["system"] for item in systems]]
+
+    def _rate(item: dict, key: str) -> str:
+        return fmt_pct(item["slices"][key])
+
+    def _n(key: str) -> str:
+        return fmt_count(systems[0]["slices"][key])
+
+    disagree = ["CISA disagrees", _n("adp_disagrees_n")]
+    for item in systems:
+        disagree.append(
+            f"{fmt_pct(item['slices']['adp_disagrees'])} match NVD, "
+            f"{fmt_pct(item['where_adp_disagrees']['matches_adp_rate'])} match CISA"
+        )
+    rows = [
+        ["kernel", _n("kernel_n"), *[_rate(item, "kernel") for item in systems]],
+        ["non-kernel", _n("non_kernel_n"), *[_rate(item, "non_kernel") for item in systems]],
+        [
+            "CISA agrees",
+            _n("adp_equals_label_n"),
+            *[_rate(item, "adp_equals_label") for item in systems],
+        ],
+        disagree,
+        ["CISA absent", _n("adp_empty_n"), *[_rate(item, "adp_empty") for item in systems]],
+    ]
+    return _md(headers, rows)
+
+
+def _block_routing(view: dict, gate_cfg: dict) -> str:
+    shipped = gate_cfg["candidate"]["shipped"]
+    names = (shipped, gate_cfg["champion"]["system"])
+    rows = []
+    for name in names:
+        for key in sorted(view[name]):
+            row = view[name][key]
+            rows.append(
+                [
+                    name,
+                    key,
+                    fmt_pct(row["dev_coverage"]),
+                    fmt_pct(row["dev_precision"]),
+                    fmt_pct(row["auto_label_rate"]),
+                    fmt_pct(row["accuracy_auto"]),
+                    fmt_pct(row["accuracy_rest"]),
+                    fmt_pct(row["claude_rest"]),
+                    fmt_pct(row["cascade_accuracy"]),
+                ]
+            )
+    return _md(
+        [
+            "System",
+            "Threshold",
+            "Dev coverage",
+            "Dev precision",
+            "Test auto-label rate",
+            "Test precision",
+            "Accuracy on the rest",
+            "Best Claude on the rest",
+            "Cascade accuracy",
+        ],
+        rows,
+    )
+
+
+def _block_cost(routing: dict, view: dict, gate_cfg: dict, bench: dict) -> str:
+    shipped = gate_cfg["candidate"]["shipped"]
+    level = next(row for row in bench["levels"] if int(row["concurrency"]) == 32)
+    rows = [[f"{shipped} concurrency 32", fmt_usd(level["cost_per_1000_usd"])]]
+    for name, doc in routing["claude_costs"].items():
+        rows.append([name, fmt_usd(doc["cost_per_1000_usd"])])
+    for key in sorted(view[shipped]):
+        cost = view[shipped][key]["cost"]["cascade"]
+        rows.append([f"{shipped} cascade {key}", fmt_usd(cost)])
+    rows.append([gate_cfg["champion"]["system"], _CPU_COST_NOTE])
+    price = routing["gpu_price_usd_per_hour"]
+    hours = routing["hours_per_month"]
+    even_rows = []
+    for name, volume in routing["break_even_records_per_month"].items():
+        whole = Decimal(str(volume)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        even_rows.append([name, fmt_count(int(whole))])
+    summary, _labels = _backlog_rows()
+    note = (
+        f"Break-even is the monthly volume at which a GPU left on for {fmt_sig(hours, 3)} "
+        f"hours at {fmt_usd(price)} per hour costs the same as that Claude run. "
+        f"Backlog batch GPU cost: {fmt_usd(summary['gpu_cost_usd'])}."
+    )
+    return (
+        _md(["System", "USD per 1,000"], rows)
+        + "\n\n"
+        + _md(["Claude run", "Break-even records per month"], even_rows)
+        + "\n\n"
+        + note
+    )
+
+
+def _backlog_rows() -> tuple[dict, list[dict]]:
+    paths = sorted((REPO_ROOT / "outputs" / "backlog").glob("*/summary.json"))
+    if len(paths) != 1:
+        raise SystemExit(f"report: expected one backlog summary, found {len(paths)}")
+    summary = json.loads(paths[0].read_text())
+    with (paths[0].parent / "labels.csv").open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if len(rows) != int(summary["rows"]):
+        raise SystemExit("report: labels.csv row count does not match the backlog summary")
+    return summary, rows
+
+
+def _block_backlog() -> str:
+    summary, rows = _backlog_rows()
+    n = len(rows)
+    n95 = sum(1 for row in rows if row["auto_95"] == "True")
+    n97 = sum(1 for row in rows if row["auto_97"] == "True")
+    n_kernel = sum(1 for row in rows if row["is_kernel"] == "True")
+    counts: Counter[str] = Counter(row["predicted_cwe"] for row in rows)
+    names: dict[str, str] = {}
+    for row in rows:
+        names.setdefault(row["predicted_cwe"], row["cwe_name"])
+    top = counts.most_common(10)
+    stored = [(item["cwe"], item["count"]) for item in summary["top_predicted_cwes"]]
+    if top != stored:
+        raise SystemExit("report: top predicted CWEs do not match the backlog summary")
+    top_rows = [[cwe, names[cwe], fmt_count(count)] for cwe, count in top]
+    lead = (
+        f"{fmt_count(n)} rows. "
+        f"At the dev 95% threshold: {fmt_count(n95)} ({fmt_pct(n95 / n)}). "
+        f"At the dev 97% threshold: {fmt_count(n97)} ({fmt_pct(n97 / n)}). "
+        f"Kernel share: {fmt_count(n_kernel)} ({fmt_pct(n_kernel / n)})."
+    )
+    return lead + "\n\n" + _md(["CWE", "Name", "Rows"], top_rows)
+
+
+def _block_errors(analysis: dict) -> str:
+    conf_rows = []
+    for item in analysis["candidate_confusions"][:10]:
+        conf_rows.append([item["gold"], item["predicted"], fmt_count(item["count"])])
+    err_rows = []
+    for item in analysis["candidate_high_confidence_errors"][:6]:
+        adp = item.get("adp_cwes") or []
+        cisa = ", ".join(adp) if adp else "none"
+        err_rows.append(
+            [
+                _cve_link(item["cve_id"]),
+                item["gold"],
+                item["predicted"],
+                fmt_pct(item["confidence"]),
+                cisa,
+            ]
+        )
+    return (
+        _md(["Gold", "Predicted", "Count"], conf_rows)
+        + "\n\n"
+        + _md(["CVE", "Gold", "Predicted", "Confidence", "CISA label"], err_rows)
+    )
+
+
+def _block_demo() -> str:
+    paths = sorted((REPO_ROOT / "outputs" / "demo_check").glob("*/summary.json"))
+    if not paths:
+        return "No demo check has been written yet."
+    summary = json.loads(paths[-1].read_text())
+    rows = [
+        [
+            fmt_count(summary["n"]),
+            fmt_pct(summary["agreement_with_bf16"]),
+            fmt_pct(summary["accuracy"]),
+            fmt_count(summary["n_with_confidence"]),
+        ]
+    ]
+    note = f"Run {summary['run_id']}. The demo model is the 4-bit file."
+    if int(summary["n_with_confidence"]) == 0:
+        note += " The server returned no token probabilities, so this check has no confidence."
+    table = _md(
+        ["Records", "Agreement with bf16", "Accuracy", "Records with confidence"],
+        rows,
+    )
+    return table + "\n\n" + note
+
+
+def _block_spend(spend: dict) -> str:
+    gpu = spend["gpu"]
+    idle = float(gpu["billed_minus_recorded_hours"]) / float(gpu["hours_so_far"])
+    purpose_rows = []
+    for name, block in gpu["seconds_by_purpose"].items():
+        seconds = f"{float(block['seconds']):,.2f}"
+        purpose_rows.append([name, seconds, fmt_count(len(block["runs"]))])
+    claude_rows = []
+    for run in spend["claude"]["runs"]:
+        claude_rows.append([run["system"], fmt_usd(run["cost_usd"])])
+    total = float(gpu["total_usd"]) + float(spend["claude"]["total_usd"])
+    lead = (
+        f"GPU {gpu['gpu']}: {float(gpu['hours_so_far']):.3f} hours, "
+        f"{fmt_usd(gpu['total_usd'])}. "
+        f"Share of billed hours with no recorded run: {fmt_pct(idle)}."
+    )
+    tail = (
+        f"Claude total {fmt_usd(spend['claude']['total_usd'])}. "
+        f"GPU plus Claude: {fmt_usd(total)}."
+    )
+    return (
+        lead
+        + "\n\n"
+        + _md(["Purpose", "Seconds", "Runs"], purpose_rows)
+        + "\n\n"
+        + _md(["Claude run", "USD"], claude_rows)
+        + "\n\n"
+        + tail
+    )
+
+
+_README_BLOCKS = (
+    "headline",
+    "facts:coverage",
+    "facts:data",
+    "table:training",
+    "table:serving",
+    "table:demo",
+    "table:gate",
+    "table:main",
+    "table:slices",
+    "table:routing",
+    "table:cost",
+    "table:backlog",
+    "table:errors",
+    "table:spend",
+)
+
+
+def _readme_blocks() -> dict[str, str]:
+    gate = json.loads((REPO_ROOT / "results" / "gate.json").read_text())
+    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
+    routing = json.loads((REPO_ROOT / "results" / "routing.json").read_text())
+    analysis = json.loads((REPO_ROOT / "results" / "error_analysis.json").read_text())
+    spend = json.loads((REPO_ROOT / "results" / "spend.json").read_text())
+    stats = json.loads((REPO_ROOT / "data" / "processed" / "stats.json").read_text())
+    _bench, _level = _bench_concurrency(32)
+    view = _route_view(gate_cfg, routing)
+    return {
+        "headline": _block_headline(gate, gate_cfg, routing, view, _bench),
+        "facts:coverage": _block_coverage(stats),
+        "facts:data": _block_data(stats),
+        "table:training": _block_training(gate_cfg),
+        "table:serving": _block_serving(_bench),
+        "table:gate": _block_gate(gate),
+        "table:main": _block_main(gate, gate_cfg),
+        "table:slices": _block_slices(analysis),
+        "table:routing": _block_routing(view, gate_cfg),
+        "table:cost": _block_cost(routing, view, gate_cfg, _bench),
+        "table:backlog": _block_backlog(),
+        "table:errors": _block_errors(analysis),
+        "table:demo": _block_demo(),
+        "table:spend": _block_spend(spend),
+    }
+
+
+def _fill_readme(text: str, blocks: dict[str, str]) -> str:
+    begins = re.findall(r"<!-- BEGIN (.+?) -->", text)
+    if begins != list(_README_BLOCKS):
+        raise SystemExit(f"report: README markers are {begins}")
+
+    def _repl(match: re.Match) -> str:
+        name = match.group(1)
+        body = blocks[name].strip("\n")
+        return f"<!-- BEGIN {name} -->\n{body}\n<!-- END {name} -->"
+
+    pattern = re.compile(
+        r"<!-- BEGIN (.+?) -->\n.*?<!-- END \1 -->",
+        re.S,
+    )
+    new, n = pattern.subn(_repl, text)
+    if n != len(_README_BLOCKS):
+        raise SystemExit(f"report: filled {n} blocks, expected {len(_README_BLOCKS)}")
+    return new
+
+
+def write_readme() -> int:
+    _fix_cpu_routing_cost()
+    path = REPO_ROOT / "README.md"
+    path.write_text(_fill_readme(path.read_text(), _readme_blocks()))
+    print("[report] wrote README.md")
+    return 0
+
+
+def check_readme() -> int:
+    path = REPO_ROOT / "README.md"
+    text = path.read_text()
+    new = _fill_readme(text, _readme_blocks())
+    if new != text:
+        sys.stderr.write("report: README.md is out of date\n")
+        import difflib
+
+        diff = difflib.unified_diff(
+            text.splitlines(),
+            new.splitlines(),
+            fromfile="README.md",
+            tofile="rendered",
+            lineterm="",
+        )
+        shown = 0
+        for line in diff:
+            sys.stderr.write(line + "\n")
+            shown += 1
+            if shown >= 80:
+                sys.stderr.write("report: diff truncated\n")
+                break
+        return 1
+    print("[report] README.md is up to date")
+    return 0
+
+
+def _wandb_key() -> str:
+    for line in (REPO_ROOT / ".env").read_text().splitlines():
+        if line.startswith("WANDB_API_KEY="):
+            return line.split("=", 1)[1].strip().strip('"')
+    raise SystemExit("report: WANDB_API_KEY is not in .env")
+
+
+def _wandb(query: str, variables: dict | None, key: str) -> dict:
+    import requests
+
+    resp = requests.post(
+        "https://api.wandb.ai/graphql",
+        json={"query": query, "variables": variables or {}},
+        headers={"Authorization": f"Bearer {key}"},
+        timeout=90,
+    )
+    doc = resp.json()
+    if "errors" in doc:
+        raise SystemExit(f"report: wandb query failed: {doc['errors'][0]['message']}")
+    return doc["data"]
+
+
+def export_curves() -> int:
+    """Train and dev loss for the six full runs, from the W&B history API."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
+    folders = [
+        name.removeprefix("candidate_")
+        for name in (
+            gate_cfg["candidate"]["one_epoch_systems"]
+            + gate_cfg["candidate"]["two_epoch_systems"]
+        )
+    ]
+    key = _wandb_key()
+    out_dir = REPO_ROOT / "results" / "curves"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    series: dict[str, list[dict]] = {}
+    for folder in folders:
+        run_doc = json.loads((REPO_ROOT / "outputs" / "train" / folder / "run.json").read_text())
+        wandb = run_doc["wandb"]
+        parts = wandb["run_url"].split("/wandb/", 1)[1].split("/")
+        entity, project, run_id = parts[0], parts[1], wandb["run_id"]
+        data = _wandb(
+            """query($entity: String!, $project: String!, $run: String!) {
+              project(name: $project, entityName: $entity) {
+                run(name: $run) { history(samples: 5000) }
+              }
+            }""",
+            {"entity": entity, "project": project, "run": run_id},
+            key,
+        )
+        history = data["project"]["run"]["history"]
+        rows = []
+        for item in history:
+            point = json.loads(item) if isinstance(item, str) else item
+            step = point.get("train/global_step")
+            if step is None:
+                continue
+            if "train/loss" not in point and "eval/loss" not in point:
+                continue
+            rows.append(
+                {
+                    "step": int(step),
+                    "train_loss": point.get("train/loss"),
+                    "eval_loss": point.get("eval/loss"),
+                }
+            )
+        rows.sort(key=lambda row: (row["step"], row["train_loss"] is None))
+        path = out_dir / f"{folder}.csv"
+        with path.open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["step", "train_loss", "eval_loss"])
+            writer.writeheader()
+            writer.writerows(rows)
+        series[folder] = rows
+        print(f"[report] wrote {path} ({len(rows)} rows)")
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for folder, rows in series.items():
+        train = [(row["step"], row["train_loss"]) for row in rows if row["train_loss"] is not None]
+        dev = [(row["step"], row["eval_loss"]) for row in rows if row["eval_loss"] is not None]
+        axes[0].plot([s for s, _ in train], [v for _, v in train], label=folder)
+        axes[1].plot([s for s, _ in dev], [v for _, v in dev], marker="o", label=folder)
+    axes[0].set_title("Train loss")
+    axes[1].set_title("Dev loss")
+    for axis in axes:
+        axis.set_xlabel("Step")
+        axis.legend(fontsize=8)
+    fig.tight_layout()
+    png = out_dir / "loss.png"
+    fig.savefig(png)
+    print(f"[report] wrote {png}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Routing, error analysis, spend")
+    ap = argparse.ArgumentParser(description="README, routing, error analysis, spend")
+    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--curves", action="store_true")
     ap.add_argument("--analysis", action="store_true")
     ap.add_argument("--routing", action="store_true")
     ap.add_argument("--spend", action="store_true")
     args = ap.parse_args(argv)
-    if not (args.analysis or args.routing or args.spend):
-        ap.error("pass --analysis, --routing, --spend, or a combination")
+    if args.curves:
+        return export_curves()
+    if args.check:
+        return check_readme()
+    wrote = False
     if args.analysis:
         write_analysis()
+        wrote = True
     if args.routing:
         write_routing()
+        wrote = True
     if args.spend:
         write_spend()
+        wrote = True
+    if not wrote:
+        return write_readme()
     return 0
 
 

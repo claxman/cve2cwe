@@ -12,6 +12,9 @@ __pycache__/
 .DS_Store
 *.egg-info/
 .pod
+outputs/_logs/
+outputs/llm_eval/
+pod-logs/
 # Unsloth writes compiled decoder-layer caches here at import time.
 # It is a pod-side build artefact, not source, so training must not call it dirty.
 unsloth_compiled_cache/

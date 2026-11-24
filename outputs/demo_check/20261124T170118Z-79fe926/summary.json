@@ -1,0 +1,14 @@
+{
+  "run_id": "20261124T170118Z-79fe926",
+  "n": 200,
+  "seed": 20261124,
+  "n_agree_with_bf16": 197,
+  "agreement_with_bf16": 0.985,
+  "n_correct": 176,
+  "accuracy": 0.88,
+  "n_with_confidence": 200,
+  "bf16_prediction_dir": "results/candidate_e2-seed1/dev",
+  "model": "candidate-e2-seed1",
+  "base_url": "http://127.0.0.1:8080/v1",
+  "note": "This server is the Q4_K_M GGUF. Reported scores in the README come from the bf16 checkpoint."
+}

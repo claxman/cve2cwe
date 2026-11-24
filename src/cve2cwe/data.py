@@ -616,14 +616,25 @@ def near_duplicate_share(
     train: list[dict[str, Any]],
     test: list[dict[str, Any]],
     thresholds: list[float],
+    *,
+    description_chars: int,
+    ngram_range: list[int],
+    min_df: int,
+    max_features: int,
+    batch: int,
 ) -> dict[str, float]:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.preprocessing import normalize
 
     if not test or not train:
         return {str(t): 0.0 for t in thresholds}
-    texts = [r["description"][:2000] for r in train] + [r["description"][:2000] for r in test]
-    vec = TfidfVectorizer(ngram_range=(1, 2), min_df=2, max_features=200_000)
+    chars = int(description_chars)
+    texts = [r["description"][:chars] for r in train] + [r["description"][:chars] for r in test]
+    vec = TfidfVectorizer(
+        ngram_range=(int(ngram_range[0]), int(ngram_range[1])),
+        min_df=int(min_df),
+        max_features=int(max_features),
+    )
     X = vec.fit_transform(texts)
     X = normalize(X, norm="l2", axis=1, copy=False)
     n_train = len(train)
@@ -631,7 +642,7 @@ def near_duplicate_share(
     X_test = X[n_train:]
     # Batched max cosine per test record.
     max_sim = np.zeros(X_test.shape[0], dtype=np.float32)
-    batch = 1024
+    batch = int(batch)
     for i in range(0, X_test.shape[0], batch):
         chunk = X_test[i : i + batch]
         sims = chunk @ X_train.T
@@ -1045,7 +1056,17 @@ def main() -> int:
     enforce_lock(test_bytes, test_path)
 
     # 10. Near-duplicate share (before writing so stats include it).
-    near_dup = near_duplicate_share(train, test, cfg["near_duplicate_thresholds"])
+    nd = cfg["near_duplicate"]
+    near_dup = near_duplicate_share(
+        train,
+        test,
+        cfg["near_duplicate_thresholds"],
+        description_chars=nd["description_chars"],
+        ngram_range=nd["ngram_range"],
+        min_df=nd["min_df"],
+        max_features=nd["max_features"],
+        batch=nd["batch"],
+    )
 
     # 11. Write processed files.
     train_gz = processed / "train.jsonl.gz"

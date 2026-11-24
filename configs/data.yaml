@@ -36,8 +36,15 @@ min_train_class_count: 200
 # Rule 6: cap per class in train at the most recent N records.
 train_per_class_cap: 3000
 
-# Near-duplicate report thresholds (TF-IDF cosine).
+# Near-duplicate report. Cosine on word TF-IDF of the first description_chars
+# characters. The thresholds are the cuts reported in stats.json.
 near_duplicate_thresholds: [0.8, 0.9]
+near_duplicate:
+  description_chars: 2000
+  ngram_range: [1, 2]
+  min_df: 2
+  max_features: 200000
+  batch: 1024
 
 # Filesystem layout.
 raw_dir: "data/raw"

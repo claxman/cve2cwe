@@ -9,5 +9,6 @@ huggingface-hub
 openai
 anthropic
 gradio
+matplotlib
 pytest
 ruff
