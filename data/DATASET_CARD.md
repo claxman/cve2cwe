@@ -24,28 +24,28 @@ Do not hand-edit numbers. Rebuild with `make data`.
 
 | step | count |
 |---|---:|
-| final_dev | 2759 |
-| final_test | 2266 |
-| final_train | 42291 |
-| label_set_size | 53 |
-| rule_1_dropped_rejected | 6955 |
 | rule_1_input | 263668 |
+| rule_1_dropped_rejected | 6955 |
 | rule_1_kept | 256713 |
-| rule_2_dropped_multi_label | 814 |
 | rule_2_dropped_no_label | 165702 |
 | rule_2_dropped_placeholder | 23137 |
+| rule_2_dropped_multi_label | 814 |
 | rule_2_kept | 67060 |
+| rule_3_split_train | 61670 |
 | rule_3_split_dev | 2907 |
 | rule_3_split_test | 2483 |
-| rule_3_split_train | 61670 |
+| label_set_size | 53 |
+| rule_4_train_kept | 56005 |
 | rule_4_dev_kept | 2761 |
 | rule_4_test_kept | 2266 |
-| rule_4_train_kept | 56005 |
 | rule_5_dev_dropped_equals_test | 2 |
-| rule_5_train_conflicting_labels | 149 |
 | rule_5_train_dropped_equals_dev_or_test | 48 |
 | rule_5_train_within_dropped | 3574 |
+| rule_5_train_conflicting_labels | 149 |
 | rule_6_train_dropped | 10092 |
+| final_train | 42291 |
+| final_dev | 2759 |
+| final_test | 2266 |
 
 Rule 4 coverage (kept records over single-label records in that split):
 - train: 0.9081
@@ -95,8 +95,8 @@ Per publication year and for the test window.
 
 | threshold | share |
 |---|---:|
-| share_ge_0_80 | 0.0163 |
-| share_ge_0_90 | 0.0035 |
+| 0.80 | 0.0163 |
+| 0.90 | 0.0035 |
 
 ## Class table
 

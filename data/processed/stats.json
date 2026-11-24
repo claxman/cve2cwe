@@ -1,12 +1,12 @@
 {
   "funnel": {
     "rule_1_input": 263668,
-    "rule_1_kept": 256713,
-    "rule_2_kept": 67060,
-    "rule_2_dropped_placeholder": 23137,
-    "rule_2_dropped_no_label": 165702,
     "rule_1_dropped_rejected": 6955,
+    "rule_1_kept": 256713,
+    "rule_2_dropped_no_label": 165702,
+    "rule_2_dropped_placeholder": 23137,
     "rule_2_dropped_multi_label": 814,
+    "rule_2_kept": 67060,
     "rule_3_split_train": 61670,
     "rule_3_split_dev": 2907,
     "rule_3_split_test": 2483,

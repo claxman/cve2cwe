@@ -1,6 +1,7 @@
 {
   "source": "official",
-  "git_commit": "a0559ccc4d9e159beec252f02639c8f334782287",
+  "git_commit": "10e6994ef63871173387814df874abc515aab109",
+  "git_dirty": false,
   "config_sha256": "47023edd13eb501d770a8f490c7a2787d90e6fa8144f90a44dd238e8f98f6df0",
   "package_versions": {
     "numpy": "2.5.5",
@@ -10,8 +11,8 @@
     "requests": "2.34.2",
     "pyyaml": "6.0.4"
   },
-  "created_utc": "2026-11-23T21:25:07Z",
-  "finished_utc": "2026-11-23T21:25:31Z",
+  "created_utc": "2026-11-24T07:47:45Z",
+  "finished_utc": "2026-11-24T07:48:25Z",
   "raw": {
     "CVE-2021": {
       "url": "https://nvd.nist.gov/feeds/json/cve/2.0/nvdcve-2.0-2021.json.gz",
@@ -74,7 +75,7 @@
       "rows": 53
     },
     "stats.json": {
-      "sha256": "618d9a76040247c13d2af06d4de2ede1b8e5635d0052f67342178052fba8eb57"
+      "sha256": "d1049cc0644cc65c1d47be1836689768ad38b8a8fd7da3b93b3dac3b077fa912"
     }
   }
 }
