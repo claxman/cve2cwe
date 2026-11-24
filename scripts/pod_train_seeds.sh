@@ -11,7 +11,16 @@ LIVE=/workspace/cve2cwe
 FROZEN=/workspace/run-$HASH
 LOG_DIR=/workspace/logs
 SESSION="cve2cwe-$HASH"
-RUNNER=$LOG_DIR/run_seeds_${HASH}.sh
+
+# Refuse to start while any other cve2cwe-* tmux session exists, because
+# this script re-points the train venv's editable cve2cwe install at a new
+# frozen tree and would corrupt a running run from the previous launch.
+EXISTING=$(tmux ls 2>/dev/null | awk -F: '/^cve2cwe-/ {print $1}' || true)
+if [ -n "$EXISTING" ]; then
+    echo "pod_train_seeds: refusing to start; tmux session(s) still running:" >&2
+    echo "$EXISTING" >&2
+    exit 2
+fi
 
 mkdir -p "$LOG_DIR"
 
@@ -29,26 +38,43 @@ if [ ! -d "$FROZEN" ]; then
         --exclude '__pycache__/' \
         --exclude '.pytest_cache/' \
         --exclude '.ruff_cache/' \
+        --exclude 'unsloth_compiled_cache/' \
         "$LIVE/" "$FROZEN/"
     # Reset the frozen tree to HEAD. The live tree's outputs/ and results/
     # are excluded from the Mac's push, so their pod-side copies drift from
     # the committed versions; checking out from .git restores every tracked
-    # file so git_dirty is false at training start.
+    # file so the clean check below passes.
     (cd "$FROZEN" && git checkout --quiet -- .)
     echo "pod_train_seeds: froze $LIVE -> $FROZEN"
 else
     echo "pod_train_seeds: reusing existing $FROZEN"
 fi
 
-# Confirm the frozen tree is clean before launching anything.
-if ! git -C "$FROZEN" diff-index --quiet HEAD --; then
+# Confirm the frozen tree is clean before launching anything. porcelain
+# catches untracked source files too; .gitignore keeps the unsloth build
+# cache out of this check.
+dirty=$(git -C "$FROZEN" status --porcelain)
+if [ -n "$dirty" ]; then
     echo "pod_train_seeds: frozen tree $FROZEN is dirty after reset; aborting:" >&2
-    git -C "$FROZEN" status --short >&2
+    echo "$dirty" >&2
     exit 2
 fi
 
+# Read the run tag from the frozen config so log, checkpoint and outputs
+# names match train.py's run_name. Empty tag -> no prefix.
+TAG=$(python3 -c "import yaml,sys; c=yaml.safe_load(open('$FROZEN/configs/train.yaml')); t=c.get('run_tag') or ''; sys.stdout.write(str(t).strip())" || true)
+if [ -n "$TAG" ]; then
+    NAME_PREFIX="${TAG}-"
+    ALL_LOG=$LOG_DIR/${TAG}-all.log
+else
+    NAME_PREFIX=""
+    ALL_LOG=$LOG_DIR/all.log
+fi
+RUNNER=$LOG_DIR/run_seeds_${NAME_PREFIX}${HASH}.sh
+
 # Re-install the editable package so `python -m cve2cwe` resolves to the
-# frozen tree, not the live one.
+# frozen tree, not the live one. This is the single pip/uv call the user
+# allows while a train loop is live.
 # shellcheck disable=SC1091
 source /workspace/.venv-train/bin/activate
 cd "$FROZEN"
@@ -73,26 +99,21 @@ if [ -f $LIVE/.env ]; then
     set +a
 fi
 for SEED in 1 2 3; do
-    echo "=== seed\${SEED} start \$(date -u +%FT%TZ) ===" | tee -a $LOG_DIR/seed\${SEED}.log
-    python -m cve2cwe train --seed \$SEED 2>&1 | tee -a $LOG_DIR/seed\${SEED}.log
+    LOG=$LOG_DIR/${NAME_PREFIX}seed\${SEED}.log
+    echo "=== ${NAME_PREFIX}seed\${SEED} start \$(date -u +%FT%TZ) ===" | tee -a \$LOG
+    python -m cve2cwe train --seed \$SEED 2>&1 | tee -a \$LOG
     rc=\${PIPESTATUS[0]}
-    echo "=== seed\${SEED} exit=\$rc ===" | tee -a $LOG_DIR/seed\${SEED}.log
+    echo "=== ${NAME_PREFIX}seed\${SEED} exit=\$rc ===" | tee -a \$LOG
     if [ "\$rc" -ne 0 ]; then
-        echo "stop on failure at seed\${SEED}" | tee -a $LOG_DIR/seed\${SEED}.log
+        echo "stop on failure at ${NAME_PREFIX}seed\${SEED}" | tee -a \$LOG
         exit \$rc
     fi
 done
-echo "=== all seeds done \$(date -u +%FT%TZ) ===" | tee -a $LOG_DIR/all.log
+echo "=== all seeds done \$(date -u +%FT%TZ) ===" | tee -a $ALL_LOG
 SCRIPT
 chmod +x "$RUNNER"
-
-# Fail fast if a stale session from a previous run is still live.
-if tmux has-session -t "$SESSION" 2>/dev/null; then
-    echo "pod_train_seeds: tmux session $SESSION already exists (attach with 'tmux attach -t $SESSION')" >&2
-    exit 2
-fi
 
 tmux new-session -d -s "$SESSION" -c "$FROZEN" "bash $RUNNER"
 echo "pod_train_seeds: tmux session '$SESSION' detached. Attach with:"
 echo "  tmux attach -t $SESSION"
-echo "  tail -f $LOG_DIR/seed1.log"
+echo "  tail -f $LOG_DIR/${NAME_PREFIX}seed1.log"

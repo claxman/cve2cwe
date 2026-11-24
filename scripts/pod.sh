@@ -30,7 +30,7 @@ usage() {
 Usage:
   scripts/pod.sh push              Sync this repo to the pod (keeps .git; skips .venv*, data/raw, checkpoints, wandb).
   scripts/pod.sh run  <cmd ...>    Run a command on the pod inside the repo.
-  scripts/pod.sh pull              Sync outputs/, results/ and requirements/*.txt back here.
+  scripts/pod.sh pull              Sync outputs/ back here (and only outputs/).
   scripts/pod.sh ssh               Open an interactive shell on the pod.
   scripts/pod.sh train-seeds       Freeze the committed tree into /workspace/run-<short hash>/ and
                                    launch seeds 1,2,3 sequentially in a detached tmux session
@@ -62,13 +62,11 @@ case "$cmd" in
             "$ROOT/" "${SSH_USER}@${SSH_HOST}:${REPO_REMOTE}/"
         ;;
     pull)
+        # Rule: the pod writes only under outputs/. results/ is built on the
+        # Mac. results/pod.json lives on the Mac only. Errors are not
+        # swallowed so a broken pull fails loudly.
         rsync -rltz --no-owner --no-group --no-perms -e "$RSYNC_SSH" \
-            "${SSH_USER}@${SSH_HOST}:${REPO_REMOTE}/outputs/" "$ROOT/outputs/" 2>/dev/null || true
-        rsync -rltz --no-owner --no-group --no-perms -e "$RSYNC_SSH" \
-            "${SSH_USER}@${SSH_HOST}:${REPO_REMOTE}/results/" "$ROOT/results/" 2>/dev/null || true
-        rsync -rltz --no-owner --no-group --no-perms -e "$RSYNC_SSH" \
-            --include='*.txt' --exclude='*' \
-            "${SSH_USER}@${SSH_HOST}:${REPO_REMOTE}/requirements/" "$ROOT/requirements/" 2>/dev/null || true
+            "${SSH_USER}@${SSH_HOST}:${REPO_REMOTE}/outputs/" "$ROOT/outputs/"
         ;;
     run)
         if [ "$#" -eq 0 ]; then
@@ -87,9 +85,13 @@ case "$cmd" in
         ;;
     train-seeds)
         # Must run from a clean committed tree so the pod's frozen copy
-        # corresponds to a published commit. Fail fast otherwise.
-        if ! git -C "$ROOT" diff-index --quiet HEAD --; then
-            echo "pod.sh: working tree is dirty. Commit before launching training." >&2
+        # corresponds to a published commit. `git status --porcelain` covers
+        # untracked files too (unsloth_compiled_cache/ is .gitignored and
+        # does not show up). Print what is dirty and stop on any change.
+        dirty=$(git -C "$ROOT" status --porcelain)
+        if [ -n "$dirty" ]; then
+            echo "pod.sh: working tree is dirty. Commit before launching training:" >&2
+            echo "$dirty" >&2
             exit 2
         fi
         HASH=$(git -C "$ROOT" rev-parse --short HEAD)

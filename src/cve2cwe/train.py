@@ -78,24 +78,22 @@ def _git_commit() -> str:
         return ""
 
 
-def _git_dirty() -> bool:
-    """True iff any TRACKED file in the repo differs from HEAD.
-
-    `git status --porcelain` would also list untracked files, which includes
-    unsloth's `unsloth_compiled_cache/` dir that appears after `import unsloth`;
-    `diff-index --quiet HEAD --` ignores untracked content and is the right
-    check for "did the committed code change under us".
-    """
+def _git_porcelain() -> str:
+    """`git status --porcelain` output, or '' on failure."""
     try:
-        rc = subprocess.call(
-            ["git", "diff-index", "--quiet", "HEAD", "--"],
-            cwd=REPO_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return rc != 0
+        return subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=REPO_ROOT, stderr=subprocess.DEVNULL
+        ).decode()
     except Exception:
-        return False
+        return ""
+
+
+def _git_dirty() -> bool:
+    """True iff the working tree has any change relative to HEAD, including
+    untracked files. `unsloth_compiled_cache/` is .gitignored so it does not
+    show up here; any source file that is modified or untracked does, and
+    the training run refuses to start when that is the case."""
+    return bool(_git_porcelain().strip())
 
 
 def _package_versions() -> dict[str, str]:
@@ -631,6 +629,15 @@ class _EpochSaver(TrainerCallback):
         print(f"[train] saved epoch{epoch} adapter to {path}")
 
 
+def _run_name(train_cfg: dict, seed: int) -> str:
+    """Return the per-seed identifier. With `run_tag` in the config the name
+    is `<tag>-seed<N>`; with no tag (missing, null or empty) it stays
+    `seed<N>`, so the first (1-epoch) set keeps its names."""
+    tag = train_cfg.get("run_tag") or ""
+    tag = str(tag).strip()
+    return f"{tag}-seed{seed}" if tag else f"seed{seed}"
+
+
 def mode_seed(seed: int) -> int:
     """Full training run for one seed. Writes run.json at start and end."""
     train_cfg = _load_cfg(REPO_ROOT / "configs" / "train.yaml")
@@ -640,13 +647,20 @@ def mode_seed(seed: int) -> int:
     t0 = time.time()
 
     git_commit = _git_commit()
-    git_dirty = _git_dirty()
+    porcelain = _git_porcelain()
+    git_dirty = bool(porcelain.strip())
+    if git_dirty:
+        print("[train] refusing to start: git working tree is dirty")
+        for line in porcelain.splitlines():
+            print(f"  {line}")
+        return 2
 
+    run_name = _run_name(train_cfg, seed)
     checkpoints_root = Path(os.environ.get("CVE2CWE_CHECKPOINTS", "/workspace/checkpoints"))
-    seed_dir = checkpoints_root / f"seed{seed}"
+    seed_dir = checkpoints_root / run_name
     seed_dir.mkdir(parents=True, exist_ok=True)
 
-    run_out_dir = OUTPUT_DIR / "train" / f"seed{seed}"
+    run_out_dir = OUTPUT_DIR / "train" / run_name
     run_out_dir.mkdir(parents=True, exist_ok=True)
     run_json_path = run_out_dir / "run.json"
 
@@ -721,7 +735,7 @@ def mode_seed(seed: int) -> int:
         max_steps=None,
         num_train_epochs=num_epochs,
         output_dir=seed_dir,
-        run_name=f"seed{seed}",
+        run_name=run_name,
         eval_steps=eval_steps,
         logging_steps=logging_steps,
         save_strategy="no",  # we save per-epoch via the callback below
@@ -789,7 +803,9 @@ def mode_seed(seed: int) -> int:
             "steps_completed": steps,
             "epoch_adapter_dirs": epoch_saver.saved,
             "final_adapter_dir": str(seed_dir / "final"),
-            "wandb": _wandb_info(train_cfg["wandb"]["project"], f"seed{seed}"),
+            "wandb": _wandb_info(train_cfg["wandb"]["project"], run_name),
+            "run_tag": train_cfg.get("run_tag") or "",
+            "run_name": run_name,
         }
     )
     run_json_path.write_text(json.dumps(completed, indent=2) + "\n")

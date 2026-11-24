@@ -87,11 +87,21 @@ logging_steps: 10
 #   - probe epoch estimate <= 25 min   -> num_train_epochs = 1
 #   - probe epoch estimate >  25 min   -> stop and report
 #
-# Probe on 2026-11-24: 100 steps on 3,200-row random sample took 103.9 s
-# (1.04 s/step, peak 15.3 GiB). Estimated epoch on 42,291 rows = 22.9 min,
-# which puts us in the 12-25 min band, so num_train_epochs = 1. Three seeds
-# at 1 epoch each is roughly 69 minutes of training.
-num_train_epochs: 1
+# Probe on 2026-11-24: 100 steps on a 3,200-row random sample took 103.9 s
+# (1.04 s/step, peak 15.3 GiB). That gave an epoch estimate of 22.9 min, so
+# the 1-epoch seed1 (commit 225b6dd) was launched. seed1 then finished a
+# full epoch in 569.9 s (9.5 min, see outputs/train/seed1/run.json), which
+# is well under 12 min. The probe measured warm-up, not steady state. Under
+# the same rule applied to the measured time, 2 epochs is allowed. Both
+# lengths are trained and the one with higher mean dev accuracy over its
+# three seeds is the candidate (see docs/DESIGN.md section 7).
+num_train_epochs: 2
+
+# Optional run tag. With a tag the W&B run name, the checkpoints directory
+# and the outputs/train directory are "<tag>-seed<N>"; with no tag they are
+# "seed<N>" so the first (1-epoch) set keeps its names. Use an empty string
+# or null to mean "no tag".
+run_tag: "e2"
 
 # Seeds used for the three training runs.
 seeds: [1, 2, 3]
