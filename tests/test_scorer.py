@@ -10,6 +10,7 @@ import pytest
 
 from cve2cwe.baselines import compile_keyword_rules, predict_keyword
 from cve2cwe.scorer import (
+    assert_reparse_matches,
     bootstrap_accuracy_ci,
     check_coverage,
     compute_metrics,
@@ -132,6 +133,28 @@ def test_paired_bootstrap_identical_systems_is_zero() -> None:
     )
     assert lo == 0.0
     assert hi == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Re-parse cross-check: the scorer never trusts a stored parsed value.
+
+
+def test_reparse_passes_on_consistent_predictions() -> None:
+    preds = [
+        {"cve_id": "A", "raw_output": "CWE-79", "parsed": "CWE-79", "confidence": None},
+        {"cve_id": "B", "raw_output": "", "parsed": None, "confidence": None},
+        {"cve_id": "C", "raw_output": "cwe-79", "parsed": None, "confidence": None},
+    ]
+    assert_reparse_matches(preds, LABEL_SET)
+
+
+def test_reparse_fails_when_stored_parsed_disagrees() -> None:
+    # Stored a label but raw_output would not parse to it; the scorer refuses.
+    preds = [
+        {"cve_id": "A", "raw_output": "lowercase cwe-79", "parsed": "CWE-79", "confidence": None},
+    ]
+    with pytest.raises(ValueError, match="disagrees"):
+        assert_reparse_matches(preds, LABEL_SET)
 
 
 # ---------------------------------------------------------------------------

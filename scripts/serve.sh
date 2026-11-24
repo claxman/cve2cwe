@@ -45,6 +45,8 @@ MAX_NUM_SEQS="$(_yaml_get max_num_seqs)"
 HOST="$(_yaml_get host)"
 REVISION=""
 SERVED_NAME=""
+ENFORCE_EAGER=0
+NO_PREFIX_CACHING=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -53,6 +55,9 @@ while [ "$#" -gt 0 ]; do
         --max-model-len)         MAX_MODEL_LEN="$2"; shift 2 ;;
         --gpu-memory-utilization) GPU_MEM_UTIL="$2"; shift 2 ;;
         --served-model-name)     SERVED_NAME="$2"; shift 2 ;;
+        # Determinism flags (pass-through to vllm).
+        --enforce-eager)          ENFORCE_EAGER=1; shift ;;
+        --no-enable-prefix-caching) NO_PREFIX_CACHING=1; shift ;;
         *) echo "serve.sh: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -90,6 +95,12 @@ CMD=(vllm serve "$MODEL"
 )
 if [ -n "$REVISION" ]; then
     CMD+=(--revision "$REVISION")
+fi
+if [ "$ENFORCE_EAGER" = "1" ]; then
+    CMD+=(--enforce-eager)
+fi
+if [ "$NO_PREFIX_CACHING" = "1" ]; then
+    CMD+=(--no-enable-prefix-caching)
 fi
 
 echo "[serve] starting: ${CMD[*]}" | tee -a "$LOG"

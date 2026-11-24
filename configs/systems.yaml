@@ -24,6 +24,22 @@ retrieval:
   num_examples: 5
   max_example_chars: 600
 
+# Claude API pricing (DESIGN section 6 systems 7; Step 7 work order part 2.3).
+# Prices are USD per 1,000,000 tokens. "price_read_on" is the date these were
+# read from Anthropic's official pricing docs; url is the exact page. If the
+# page changes, update these and commit a change-log line.
+claude_prices:
+  price_read_on: "2026-11-24"
+  url: "https://docs.anthropic.com/en/docs/about-claude/pricing"
+  haiku_5_5:
+    # Base rate for prompts up to 100,000 tokens. Every CVE prompt we send is
+    # well under that bar, so this is the rate we use.
+    input_usd_per_mtok: 0.10
+    output_usd_per_mtok: 0.50
+  sonnet_5_5:
+    input_usd_per_mtok: 2.00
+    output_usd_per_mtok: 10.00
+
 # Scoring settings. DESIGN section 5. Bootstrap uses 10,000 resamples with a
 # fixed seed so intervals are reproducible across machines. macro-F1 ignores
 # any class with fewer than macro_f1_min_support records in the split.

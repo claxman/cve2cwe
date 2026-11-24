@@ -311,6 +311,27 @@ def _aligned_predictions(preds: list[dict], split_rows: list[dict]) -> list[dict
     return [by_id[r["cve_id"]] for r in split_rows]
 
 
+def assert_reparse_matches(predictions: list[dict], label_set: set[str]) -> None:
+    """Re-parse each prediction's ``raw_output`` with the canonical parser and
+    fail if the stored ``parsed`` value disagrees.
+
+    The scorer never trusts a stored ``parsed`` field blindly: every system
+    (baselines, llm_eval, frontier) is cross-checked against ``parse()`` on
+    the raw output it recorded. A disagreement means either the system used
+    a non-canonical parser or the file was edited by hand.
+    """
+    for p in predictions:
+        raw = p.get("raw_output", "")
+        stored = p.get("parsed")
+        expected = parse(raw if isinstance(raw, str) else "", label_set)
+        if stored != expected:
+            raise ValueError(
+                f"predictions.jsonl stored parsed={stored!r} disagrees with "
+                f"re-parsing raw_output={raw!r} -> {expected!r} "
+                f"(cve_id={p.get('cve_id')!r})"
+            )
+
+
 def _scoring_cfg() -> dict:
     cfg = load_systems_cfg()["scoring"]
     return {
@@ -343,6 +364,7 @@ def score_prediction_dir(
     check_coverage([p["cve_id"] for p in preds], [r["cve_id"] for r in split_rows])
     aligned = _aligned_predictions(preds, split_rows)
     label_set = load_label_set()
+    assert_reparse_matches(aligned, label_set)
     cfg = _scoring_cfg()
     metrics = compute_metrics(aligned, split_rows, label_set, cfg["macro_f1_min_support"])
     correct_vec = metrics.pop("_correct_vector")
@@ -404,13 +426,11 @@ def score_paired(
     label_set = load_label_set()
     aligned_a = _aligned_predictions(preds_a, split_rows)
     aligned_b = _aligned_predictions(preds_b, split_rows)
+    assert_reparse_matches(aligned_a, label_set)
+    assert_reparse_matches(aligned_b, label_set)
     gold = np.array([r["label"] for r in split_rows])
     pred_a = np.array([(p["parsed"] if p["parsed"] is not None else "") for p in aligned_a])
     pred_b = np.array([(p["parsed"] if p["parsed"] is not None else "") for p in aligned_b])
-    # Reuse the parser to assert every parsed value is either None or valid.
-    for p in list(aligned_a) + list(aligned_b):
-        if p["parsed"] is not None and parse(p["parsed"], label_set) is None:
-            raise ValueError(f"prediction has an invalid 'parsed' field: {p}")
     correct_a = (pred_a == gold).astype(np.int32)
     correct_b = (pred_b == gold).astype(np.int32)
     cfg = _scoring_cfg()
