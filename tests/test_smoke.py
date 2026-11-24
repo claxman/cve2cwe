@@ -51,7 +51,7 @@ def test_each_unbuilt_stage_reports_not_built() -> None:
     # Stages implemented so far; skip them here (they have their own tests).
     # train, merge and llm-eval are pod-only stages (unsloth / openai client);
     # the dispatcher must not be executed for them in CI.
-    built = {"data", "baselines", "train", "merge", "llm-eval", "frontier"}
+    built = {"data", "baselines", "train", "merge", "llm-eval", "frontier", "gate"}
     for stage in STAGES:
         if stage in built:
             continue

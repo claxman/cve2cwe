@@ -52,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         from cve2cwe import llm_eval
 
         return llm_eval.main(rest)
+    if stage == "gate":
+        from cve2cwe import gate
+
+        return gate.main(rest)
     sys.stdout.write(f"{stage}: not built yet\n")
     return 1
 
