@@ -18,3 +18,24 @@ max_num_seqs: 32
 # Default bind.
 host: "0.0.0.0"
 port: 8000
+
+# H100 SXM 80 GB, RunPod Secure Cloud on-demand, read on the RunPod console
+# 2026-11-24. Matches results/pod.json price_usd_per_hour.total.
+gpu_name: "H100 SXM 80 GB"
+gpu_price_usd_per_hour: 4.42
+gpu_price_read_utc: "2026-11-24"
+gpu_price_source: "RunPod Secure Cloud on-demand, read on the RunPod console 2026-11-24"
+
+# 24 * 365 / 12. Used for the always-on GPU break-even volume.
+hours_per_month: 730
+
+# Benchmark client. The shipping server leaves max_num_seqs at 32.
+# The benchmark server overrides it so concurrency 64 is a real batch.
+bench:
+  sample_size: 500
+  warmup_requests: 50
+  seed: 20261124
+  concurrencies: [1, 8, 32, 64]
+  max_new_tokens: 8
+  temperature: 0.0
+  max_num_seqs: 64

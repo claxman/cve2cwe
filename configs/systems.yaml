@@ -48,6 +48,12 @@ scoring:
   bootstrap_seed: 20261124
   macro_f1_min_support: 20
 
+# Error-analysis sizes. per-class rows use scoring.macro_f1_min_support.
+report:
+  confusion_top_n: 15
+  example_errors: 12
+  example_description_chars: 240
+
 # Keyword baseline rules (system 2 in DESIGN section 6). Written once, not
 # tuned. Each pattern is a case-insensitive regex; if exactly one rule's
 # regex finds a match in the (cut) description, the output is that CWE. If

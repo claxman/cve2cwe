@@ -337,6 +337,62 @@ def _coverage_bucket_init() -> dict[str, int]:
     }
 
 
+def rule1_drop(cve: dict[str, Any], cfg: dict[str, Any]) -> str | None:
+    """Why rule 1 drops this CVE, or None when the record is kept.
+
+    The same checks the coverage table is counted on: not rejected, an
+    English description, a publication date, on or after earliest_published.
+    """
+    if cve.get("vulnStatus") == "Rejected":
+        return "rule_1_dropped_rejected"
+    if _english_description(cve) is None:
+        return "rule_1_dropped_no_english"
+    published = cve.get("published") or ""
+    if not isinstance(published, str) or len(published) < 10:
+        return "rule_1_dropped_no_date"
+    if published[:10] < cfg["earliest_published"]:
+        return "rule_1_dropped_before_cutoff"
+    return None
+
+
+def coverage_flags(cve: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+    """The CWE-source flags the pre-rule-2 coverage table uses.
+
+    An NVD analyst CWE is a value matching ``^CWE-\\d+$``. Placeholders
+    such as NVD-CWE-Other and NVD-CWE-noinfo do not count.
+    """
+    source_identifier = cve.get("sourceIdentifier") or ""
+    nvd_vals = _analyst_values(cve, cfg["nvd_source"])
+    nvd_cwe_values = [v for v in nvd_vals if _CWE_RE.match(v)]
+    cna_cwes = _cwe_ids_for_source(cve, source_identifier)
+    adp_cwes = _cwe_ids_for_source(cve, cfg["adp_source"])
+    return {
+        "source_identifier": source_identifier,
+        "nvd_vals": nvd_vals,
+        "has_nvd_analyst": bool(nvd_cwe_values),
+        "has_cna": bool(cna_cwes),
+        "has_adp": bool(adp_cwes),
+        "cna_cwes": cna_cwes,
+        "adp_cwes": adp_cwes,
+        "is_kernel": source_identifier == cfg["kernel_source"],
+    }
+
+
+def is_unlabelled_backlog(cve: dict[str, Any], cfg: dict[str, Any]) -> bool:
+    """True for a test-window record with no CWE from any of the three sources.
+
+    This is the "none of the three" cell of the coverage table: rule 1 kept,
+    published on or after test_start, and not has_nvd_analyst, has_cna or has_adp.
+    """
+    if rule1_drop(cve, cfg) is not None:
+        return False
+    published = cve.get("published") or ""
+    if not _in_test_window(published, cfg):
+        return False
+    flags = coverage_flags(cve, cfg)
+    return not (flags["has_nvd_analyst"] or flags["has_cna"] or flags["has_adp"])
+
+
 def collect(
     source: str, paths: dict[int, Path], cfg: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, dict[str, int]]]:
@@ -347,10 +403,6 @@ def collect(
     funnel = Counter()
     coverage: dict[str, dict[str, int]] = defaultdict(_coverage_bucket_init)
     kept: list[dict[str, Any]] = []
-    earliest = cfg["earliest_published"]
-    nvd_src = cfg["nvd_source"]
-    adp_src = cfg["adp_source"]
-    kernel_src = cfg["kernel_source"]
     placeholders = set(cfg["placeholder_labels"])
 
     for year in sorted(paths):
@@ -361,36 +413,23 @@ def collect(
             n_in += 1
             funnel["rule_1_input"] += 1
 
-            # Rule 1a: drop Rejected.
-            if cve.get("vulnStatus") == "Rejected":
-                funnel["rule_1_dropped_rejected"] += 1
-                continue
-            # Rule 1b: drop no English description.
-            desc = _english_description(cve)
-            if desc is None:
-                funnel["rule_1_dropped_no_english"] += 1
-                continue
-            # Rule 1c: drop before earliest_published.
-            published = cve.get("published") or ""
-            if not isinstance(published, str) or len(published) < 10:
-                funnel["rule_1_dropped_no_date"] += 1
-                continue
-            if published[:10] < earliest:
-                funnel["rule_1_dropped_before_cutoff"] += 1
+            drop = rule1_drop(cve, cfg)
+            if drop is not None:
+                funnel[drop] += 1
                 continue
             funnel["rule_1_kept"] += 1
-
-            source_identifier = cve.get("sourceIdentifier") or ""
-
-            # Pre-rule-2 coverage (by publication year and for the test window).
-            nvd_vals = _analyst_values(cve, nvd_src)
-            nvd_cwe_values = [v for v in nvd_vals if _CWE_RE.match(v)]
-            has_nvd_analyst = bool(nvd_cwe_values)
-            cna_cwes = _cwe_ids_for_source(cve, source_identifier)
-            adp_cwes = _cwe_ids_for_source(cve, adp_src)
-            has_cna = bool(cna_cwes)
-            has_adp = bool(adp_cwes)
-            is_kernel = source_identifier == kernel_src
+            desc = _english_description(cve)
+            published = cve["published"]
+            # Same flags the coverage table and the backlog filter use.
+            flags = coverage_flags(cve, cfg)
+            source_identifier = flags["source_identifier"]
+            nvd_vals = flags["nvd_vals"]
+            has_nvd_analyst = flags["has_nvd_analyst"]
+            has_cna = flags["has_cna"]
+            has_adp = flags["has_adp"]
+            cna_cwes = flags["cna_cwes"]
+            adp_cwes = flags["adp_cwes"]
+            is_kernel = flags["is_kernel"]
 
             bucket_keys = [_year_of(published)]
             if _in_test_window(published, cfg):

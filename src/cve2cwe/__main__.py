@@ -1,4 +1,4 @@
-"""Command dispatcher. Each stage prints "not built yet" and exits 1 for now."""
+"""Command dispatcher. A stage that is not built yet prints that and exits 1."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ STAGES = (
     "merge",
     "gate",
     "bench",
+    "backlog",
     "demo",
     "report",
 )
@@ -56,6 +57,18 @@ def main(argv: list[str] | None = None) -> int:
         from cve2cwe import gate
 
         return gate.main(rest)
+    if stage == "bench":
+        from cve2cwe import bench
+
+        return bench.main(rest)
+    if stage == "backlog":
+        from cve2cwe import backlog
+
+        return backlog.main(rest)
+    if stage == "report":
+        from cve2cwe import report
+
+        return report.main(rest)
     sys.stdout.write(f"{stage}: not built yet\n")
     return 1
 

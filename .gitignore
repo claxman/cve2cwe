@@ -2,6 +2,7 @@
 .env
 data/raw/
 checkpoints/
+demo/models/
 wandb/
 *.safetensors
 *.gguf

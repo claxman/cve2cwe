@@ -95,6 +95,22 @@ def _load_split(split: str) -> list[dict]:
     raise ValueError(f"unknown split: {split!r}")
 
 
+def _load_input_rows(path: Path) -> list[dict]:
+    """Records with a description and no label. Used for the backlog."""
+    rows = _read_jsonl(path)
+    if not rows:
+        raise SystemExit(f"llm-eval: {path} is empty")
+    for row in rows:
+        if "cve_id" not in row or "description" not in row:
+            raise SystemExit(f"llm-eval: {path} has a row without cve_id or description")
+        if row.get("label"):
+            raise SystemExit(
+                "llm-eval: --input is for records without labels; "
+                f"{row['cve_id']} has a label"
+            )
+    return rows
+
+
 def _load_train_rows() -> list[dict]:
     return _read_jsonl_gz(REPO_ROOT / "data" / "processed" / "train.jsonl.gz")
 
@@ -421,8 +437,11 @@ def run(
     temperature: float,
     repeat_check: int,
     outputs_root: Path,
+    input_path: Path | None = None,
 ) -> int:
-    guard_test_split_candidate(name, split)
+    # --input is not the locked test split. The guard only fires on "test".
+    split_name = "backlog" if input_path is not None else split
+    guard_test_split_candidate(name, split_name)
 
     info = runinfo.capture(
         packages=("numpy", "scipy", "scikit-learn", "pyyaml", "openai", "httpx")
@@ -441,8 +460,11 @@ def run(
     labels = load_labels()
     labels_order = [lab["id"] for lab in labels]
     label_set = load_label_set()
-    rows = _load_split(split)
-    print(f"[llm-eval] system={system} name={name} split={split} n={len(rows)}")
+    if input_path is not None:
+        rows = _load_input_rows(input_path)
+    else:
+        rows = _load_split(split)
+    print(f"[llm-eval] system={system} name={name} split={split_name} n={len(rows)}")
 
     # Pre-build per-system state.
     few_shot_examples = None
@@ -497,7 +519,7 @@ def run(
     run_id_ts = info.started_utc.replace("-", "").replace(":", "")
     short = info.git_commit[:7] if info.git_commit else "nogit"
     run_id = f"{run_id_ts}-{short}"
-    out_dir = outputs_root / name / split / run_id
+    out_dir = outputs_root / name / split_name / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     pred_tmp = out_dir / "predictions.jsonl.tmp"
     pred_final = out_dir / "predictions.jsonl"
@@ -622,7 +644,8 @@ def run(
     run_meta = {
         "system": name,
         "prompt_name": system,
-        "split": split,
+        "split": split_name,
+        "input_path": str(input_path) if input_path is not None else None,
         "run_id": run_id,
         "served_model": model,
         "base_model": base_model_cfg,
@@ -679,7 +702,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         choices=("candidate", "zero_shot", "few_shot", "retrieval"),
         help="which prompt to render",
     )
-    ap.add_argument("--split", required=True, choices=("dev", "test"))
+    ap.add_argument("--split", choices=("dev", "test"))
+    ap.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="jsonl of records with cve_id and description and no label",
+    )
     ap.add_argument(
         "--model",
         required=True,
@@ -704,11 +733,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="resend the first N records and fail if any raw output differs (0 to skip)",
     )
     args = ap.parse_args(list(argv) if argv is not None else None)
+    if (args.input is None) == (args.split is None):
+        ap.error("pass exactly one of --split or --input")
 
     return run(
         name=args.name,
         system=args.system,
-        split=args.split,
+        split=args.split or "backlog",
         model=args.model,
         base_url=args.base_url,
         concurrency=args.concurrency,
@@ -716,6 +747,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         temperature=args.temperature,
         repeat_check=args.repeat_check,
         outputs_root=REPO_ROOT / "outputs",
+        input_path=args.input,
     )
 
 

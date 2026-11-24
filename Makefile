@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 UV := uv
 
-.PHONY: setup lint test data baselines llm-eval frontier train merge gate bench demo report
+.PHONY: setup lint test data baselines llm-eval frontier train merge gate bench backlog demo report
 
 setup:
 	$(UV) venv --python 3.12 .venv
@@ -37,6 +37,9 @@ gate:
 
 bench:
 	$(PY) -m cve2cwe bench
+
+backlog:
+	$(PY) -m cve2cwe backlog
 
 demo:
 	$(PY) -m cve2cwe demo

@@ -296,17 +296,19 @@ src/cve2cwe/
   train.py      Unsloth LoRA fine-tune
   merge.py      merge adapter, save bf16 checkpoint, export GGUF
   bench.py      latency, throughput, cost
+  backlog.py    test-window records with no CWE from NVD, the CNA or CISA ADP
   gate.py       PROMOTE or REJECT with evidence
   report.py     results to README tables, routing table, error analysis
 scripts/        setup_git.sh  pod.sh  serve.sh
 demo/           app.py  README.md
 data/           NOTICE.md  DATASET_CARD.md
   processed/    train.jsonl.gz  dev.jsonl  test.jsonl  labels.json
-                must_pass.json  MANIFEST.json  stats.json
+                must_pass.json  MANIFEST.json  stats.json  unlabelled.jsonl
 outputs/        raw predictions per system, split and run
 results/        metrics, per-class tables, gate, serving, routing, spend
 docs/           DESIGN.md  ACCEPTANCE.md
 tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
+                test_routing.py  test_backlog.py
 .githooks/pre-commit  .githooks/commit-msg   .github/workflows/tests.yml
 ```
 
@@ -334,3 +336,6 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: Section 7 no longer says greedy decoding leaves no noise at inference. A repeat of 300 records differed on 3 outputs at 32 concurrent requests and on none with one request at a time. Gate numbers come from the deterministic mode. Other LLM runs are batched and can differ on about 1% of outputs.
 - 2026-11-24: Claude Sonnet 5.5 does not accept thinking disabled or a temperature. It was called with thinking between_tools, the lowest setting. Haiku 5.5 was called with thinking disabled.
 - 2026-11-24: Section 9 G2 reads "lower bound above zero". An interval that sits entirely below zero does not pass.
+- 2026-11-24: Added src/cve2cwe/bench.py (`python -m cve2cwe bench`). It times a fixed seeded dev sample at the concurrencies in configs/serve.yaml. The server is the shipping one: no `--enforce-eager`, prefix caching left at its default. configs/serve.yaml now carries the GPU price (4.42 USD per hour, H100 SXM 80 GB, RunPod Secure Cloud on-demand, read 2026-11-24) and hours_per_month 730 (24 * 365 / 12).
+- 2026-11-24: Added src/cve2cwe/backlog.py (`python -m cve2cwe backlog`). It writes data/processed/unlabelled.jsonl for test-window CVEs that rule 1 keeps and that have no CWE from NVD analysts (placeholders do not count), the CNA, or CISA ADP. The flags are coverage_flags(), the same function the pre-rule-2 coverage table uses. `--predictions` writes outputs/backlog/<run_id>/labels.csv and summary.json. llm-eval accepts `--input` for records that have no label. Appendix B updated.
+- 2026-11-24: Added src/cve2cwe/report.py. `--analysis` writes results/error_analysis.json, `--routing` writes results/routing.json from prediction files and the concurrency-32 benchmark cost, `--spend` writes results/spend.json.

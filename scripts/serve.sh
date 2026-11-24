@@ -14,6 +14,7 @@
 #   --max-model-len N           server context length (default 8192)
 #   --gpu-memory-utilization F  fraction (default 0.90)
 #   --served-model-name NAME    name the client sends (default: the model id)
+#   --max-num-seqs N            override configs/serve.yaml max_num_seqs
 #
 # Env vars:
 #   VLLM_LOG   path for stdout/stderr (default /workspace/logs/vllm.log)
@@ -55,6 +56,7 @@ while [ "$#" -gt 0 ]; do
         --max-model-len)         MAX_MODEL_LEN="$2"; shift 2 ;;
         --gpu-memory-utilization) GPU_MEM_UTIL="$2"; shift 2 ;;
         --served-model-name)     SERVED_NAME="$2"; shift 2 ;;
+        --max-num-seqs)          MAX_NUM_SEQS="$2"; shift 2 ;;
         # Determinism flags (pass-through to vllm).
         --enforce-eager)          ENFORCE_EAGER=1; shift ;;
         --no-enable-prefix-caching) NO_PREFIX_CACHING=1; shift ;;
