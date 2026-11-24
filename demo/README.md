@@ -11,3 +11,5 @@ python -m cve2cwe demo
 ```
 
 `--reasoning off` is the flag for this llama.cpp (1.0.0) that turns thinking off. The page reads `http://127.0.0.1:8080/v1` unless you pass `--base-url`.
+
+![Demo page with a result](screenshot.png)
