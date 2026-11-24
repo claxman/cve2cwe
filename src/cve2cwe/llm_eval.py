@@ -540,17 +540,22 @@ def run(
         return 2
 
     # Repeat-check: send the first N records again and compare raw outputs.
+    # Runs serially (concurrency=1) so the server sees a batch size of one
+    # per request and vLLM's batch-order non-determinism does not contaminate
+    # the check. The check asserts "same prompt -> same raw output", not
+    # "same batching order -> same raw output".
     repeat_result: dict[str, Any] = {"count": 0, "passed": True, "mismatches": []}
     if repeat_check > 0:
         rc_n = min(repeat_check, len(rows))
-        print(f"[llm-eval] repeat-check: resending first {rc_n} records")
+        print(
+            f"[llm-eval] repeat-check: resending first {rc_n} records "
+            "(concurrency=1 for determinism)"
+        )
+        second: list[dict | None] = [None] * rc_n
         try:
-            with ThreadPoolExecutor(max_workers=concurrency) as ex:
-                futures = {ex.submit(_run_one, i): i for i in range(rc_n)}
-                second = [None] * rc_n
-                for fut in as_completed(futures):
-                    idx, pred = fut.result()
-                    second[idx] = pred
+            for i in range(rc_n):
+                _, pred = _run_one(i)
+                second[i] = pred
         except Exception as exc:
             print(
                 f"llm-eval: aborting; repeat-check failed with an unrecoverable error: {exc}",
