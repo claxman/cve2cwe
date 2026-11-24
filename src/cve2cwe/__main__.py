@@ -32,6 +32,10 @@ def main(argv: list[str] | None = None) -> int:
         from cve2cwe import data
 
         return data.main()
+    if stage == "baselines":
+        from cve2cwe import baselines
+
+        return baselines.main(rest)
     if stage == "train":
         from cve2cwe import train
 

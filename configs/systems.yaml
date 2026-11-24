@@ -2,8 +2,33 @@
 # frontier). DESIGN section 3: "every system uses the first 2,000 characters
 # of the CVE description". That cut is applied once, by the shared helper in
 # src/cve2cwe/prompts.py, before the chat template is rendered.
-#
-# Step 6 will add per-system identifiers (baseline name, candidate checkpoint,
-# frontier model id) alongside this key.
 
 max_description_chars: 2000
+
+# Scoring settings. DESIGN section 5. Bootstrap uses 10,000 resamples with a
+# fixed seed so intervals are reproducible across machines. macro-F1 ignores
+# any class with fewer than macro_f1_min_support records in the split.
+scoring:
+  bootstrap_resamples: 10000
+  bootstrap_seed: 20261124
+  macro_f1_min_support: 20
+
+# Keyword baseline rules (system 2 in DESIGN section 6). Written once, not
+# tuned. Each pattern is a case-insensitive regex; if exactly one rule's
+# regex finds a match in the (cut) description, the output is that CWE. If
+# zero or more than one rule matches, the output is invalid.
+keyword_rules:
+  CWE-416: "use[- ]after[- ]free|\\buaf\\b"
+  CWE-476: "null[- ]pointer[- ]dereference|null[- ]ptr[- ]deref|null dereference"
+  CWE-401: "memory leak|memleak"
+  CWE-125: "out[- ]of[- ]bounds read|oob read"
+  CWE-787: "out[- ]of[- ]bounds write|oob write"
+  CWE-667: "deadlock"
+  CWE-89:  "sql injection"
+  CWE-79:  "cross[- ]site scripting|\\bxss\\b"
+  CWE-22:  "path traversal|directory traversal"
+  CWE-78:  "os command injection"
+  CWE-352: "cross[- ]site request forgery|\\bcsrf\\b"
+  CWE-918: "server[- ]side request forgery|\\bssrf\\b"
+  CWE-190: "integer overflow"
+  CWE-502: "deserialization of untrusted data|insecure deserialization"
