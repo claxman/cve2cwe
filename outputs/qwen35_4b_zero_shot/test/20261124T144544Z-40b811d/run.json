@@ -1,0 +1,60 @@
+{
+  "base_model": "Qwen/Qwen3.5-4B",
+  "base_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "counts": {
+    "errors_retried_but_failed": 0,
+    "invalid_context_length": 0,
+    "invalid_total": 7,
+    "total": 2266,
+    "valid": 2259
+  },
+  "few_shot_examples": null,
+  "finished_utc": "2026-11-24T14:46:33Z",
+  "git_commit": "40b811d10916df05d65f39d2b45c62f16745e14d",
+  "git_dirty": false,
+  "package_versions": {
+    "httpx": "0.28.1",
+    "numpy": "2.2.6",
+    "openai": "2.24.0",
+    "pyyaml": "6.0.4",
+    "scikit-learn": null,
+    "scipy": null
+  },
+  "prompt_name": "zero_shot",
+  "repeat_check": {
+    "count": 0,
+    "mismatches": [],
+    "passed": true
+  },
+  "request_settings": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "concurrency": 32,
+    "logprobs": true,
+    "max_tokens": 8,
+    "temperature": 0.0
+  },
+  "run_id": "20261124T144544Z-40b811d",
+  "served_model": "qwen35-4b-base",
+  "split": "test",
+  "started_utc": "2026-11-24T14:45:44Z",
+  "system": "qwen35_4b_zero_shot",
+  "systems_config": {
+    "few_shot": {
+      "max_example_chars": 400,
+      "num_examples": 8
+    },
+    "max_description_chars": 2000,
+    "retrieval": {
+      "max_example_chars": 600,
+      "num_examples": 5
+    }
+  },
+  "token_usage": {
+    "completion_tokens": 15665,
+    "prompt_tokens": 2418530
+  },
+  "wall_seconds": 44.97
+}

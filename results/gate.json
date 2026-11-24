@@ -1,0 +1,86 @@
+{
+  "champion": {
+    "accuracy": 0.7268314210061783,
+    "prediction_dir": "outputs/tfidf_svm/test/20261124T114405Z-5b864cd",
+    "run_id": "20261124T114405Z-5b864cd",
+    "system": "tfidf_svm"
+  },
+  "g1": true,
+  "g1_pass_line": 0.7468314210061783,
+  "mean_accuracy": 0.7590467784642542,
+  "seeds": [
+    {
+      "accuracy": 0.7541924095322153,
+      "accuracy_ci95": [
+        0.736098852603707,
+        0.7718556928508383
+      ],
+      "g2": true,
+      "g3": true,
+      "g4": true,
+      "invalid_rate": 0.0,
+      "kernel_accuracy": 0.8306650246305419,
+      "macro_f1": 0.6770561687215396,
+      "must_pass_accuracy": 0.9896313364055299,
+      "must_pass_correct": 859,
+      "must_pass_n": 868,
+      "non_kernel_accuracy": 0.5607476635514018,
+      "paired_diff": 0.027360988526037078,
+      "paired_hi": 0.041924095322153576,
+      "paired_lo": 0.01279788172992058,
+      "run_id": "20261124T145749Z-ca2c6d6",
+      "system": "candidate_e2-seed1"
+    },
+    {
+      "accuracy": 0.763018534863195,
+      "accuracy_ci95": [
+        0.7453662842012356,
+        0.7806707855251545
+      ],
+      "g2": true,
+      "g3": true,
+      "g4": true,
+      "invalid_rate": 0.0,
+      "kernel_accuracy": 0.8392857142857143,
+      "macro_f1": 0.6859433904284299,
+      "must_pass_accuracy": 0.9942396313364056,
+      "must_pass_correct": 863,
+      "must_pass_n": 868,
+      "non_kernel_accuracy": 0.5700934579439252,
+      "paired_diff": 0.036187113857016784,
+      "paired_hi": 0.05075022065313328,
+      "paired_lo": 0.021624007060900285,
+      "run_id": "20261124T151027Z-ca2c6d6",
+      "system": "candidate_e2-seed2"
+    },
+    {
+      "accuracy": 0.7599293909973521,
+      "accuracy_ci95": [
+        0.7422771403353927,
+        0.7771403353927626
+      ],
+      "g2": true,
+      "g3": true,
+      "g4": true,
+      "invalid_rate": 0.0,
+      "kernel_accuracy": 0.8362068965517241,
+      "macro_f1": 0.6810573832137538,
+      "must_pass_accuracy": 0.9930875576036866,
+      "must_pass_correct": 862,
+      "must_pass_n": 868,
+      "non_kernel_accuracy": 0.5669781931464174,
+      "paired_diff": 0.03309796999117387,
+      "paired_hi": 0.04721977052074133,
+      "paired_lo": 0.018976169461606407,
+      "run_id": "20261124T152313Z-ca2c6d6",
+      "system": "candidate_e2-seed3"
+    }
+  ],
+  "thresholds": {
+    "gain": 0.02,
+    "invalid": 0.005,
+    "must_pass": 0.98,
+    "paired_lower_bound_above": 0.0
+  },
+  "verdict": "PROMOTE"
+}
