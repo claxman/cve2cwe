@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -662,6 +662,87 @@ def fmt_sig(value: float, digits: int = 4) -> str:
     return sign + format(rounded, "f")
 
 
+def _fmt_cents(value: Decimal) -> str:
+    """Dashboard readings are in cents. Three-sig formatting would hide them."""
+    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"${format(rounded, 'f')}"
+
+
+def _fmt_rate(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." not in text:
+        return f"${text}.00"
+    whole, frac = text.split(".", 1)
+    frac = frac.rstrip("0")
+    if len(frac) < 2:
+        frac = frac.ljust(2, "0")
+    return f"${whole}.{frac}"
+
+
+_DISPLAY_NAMES = {
+    "majority": "Majority class",
+    "keyword": "Keyword rules",
+    "tfidf_svm": "TF-IDF + linear SVM",
+    "qwen35_4b_zero_shot": "Base Qwen3.5-4B, zero-shot",
+    "qwen35_4b_few_shot": "Base Qwen3.5-4B, few-shot",
+    "qwen35_4b_retrieval": "Base Qwen3.5-4B, retrieved examples",
+    "claude_haiku_5_5_zero_shot": "Claude Haiku 5.5, zero-shot",
+    "claude_haiku_5_5_retrieval": "Claude Haiku 5.5, retrieved examples",
+    "claude_sonnet_5_5_zero_shot": "Claude Sonnet 5.5, zero-shot",
+    "claude_sonnet_5_5_retrieval": "Claude Sonnet 5.5, retrieved examples",
+    "candidate_e2-seed1": "Fine-tuned Qwen3.5-4B, seed 1 (shipped)",
+    "candidate_e2-seed2": "Fine-tuned Qwen3.5-4B, seed 2",
+    "candidate_e2-seed3": "Fine-tuned Qwen3.5-4B, seed 3",
+    "candidate_e2-seed1_batched": "Fine-tuned, seed 1, batched serving",
+    "fine-tuned mean": "Fine-tuned Qwen3.5-4B, mean of 3 seeds",
+}
+
+_THRESHOLD_NAMES = {
+    "at_0.95": "dev 95% threshold",
+    "at_0.97": "dev 97% threshold",
+}
+
+
+def _display(system: str) -> str:
+    try:
+        return _DISPLAY_NAMES[system]
+    except KeyError:
+        raise SystemExit(f"report: no display name for {system}") from None
+
+
+def _threshold_name(key: str) -> str:
+    try:
+        return _THRESHOLD_NAMES[key]
+    except KeyError:
+        raise SystemExit(f"report: no display name for threshold {key}") from None
+
+
+def _english_and(parts: list[str]) -> str:
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return f"{parts[0]} and {parts[1]}"
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def _training_name(folder: str, epochs: int) -> str:
+    match = re.fullmatch(r"(?:e\d+-)?seed(\d+)", folder)
+    if match is None:
+        raise SystemExit(f"report: no display name for training run {folder}")
+    seed = match.group(1)
+    unit = "epoch" if epochs == 1 else "epochs"
+    return f"{epochs} {unit}, seed {seed}"
+
+
+def _uptime_hours(text: str) -> Decimal:
+    match = re.fullmatch(r"(?:(\d+)h)?\s*(?:(\d+)m)?", text.strip())
+    if match is None or (match.group(1) is None and match.group(2) is None):
+        raise SystemExit(f"report: cannot read pod uptime {text!r}")
+    hours = Decimal(match.group(1) or 0)
+    minutes = Decimal(match.group(2) or 0)
+    return hours + (minutes / Decimal(60))
+
+
 def _md(headers: list[str], rows: list[list[str]]) -> str:
     head = "| " + " | ".join(headers) + " |"
     rule = "|" + "|".join("---" for _ in headers) + "|"
@@ -873,59 +954,118 @@ def _block_headline(
     best = routing["best_claude"]
     best_acc = routing["claude_costs"][best]["test_accuracy"]
     shipped = gate_cfg["candidate"]["shipped"]
-    level = next(row for row in bench["levels"] if int(row["concurrency"]) == 32)
+    # Full use is the concurrency that finishes the most records per second.
+    level = max(bench["levels"], key=lambda row: float(row["records_per_second"]))
     ship = view[shipped]["at_0.95"]
-    linear = view[gate["champion"]["system"]]["at_0.95"]
-    gains = []
-    musts = []
-    invalids = []
-    for seed in gate["seeds"]:
-        gains.append(
-            f"{seed['system']} {fmt_points(seed['paired_diff'])} points "
-            f"(lower bound {fmt_points(seed['paired_lo'])})"
+    linear = view[champ["system"]]["at_0.95"]
+    seeds = gate["seeds"]
+    gains = _english_and([fmt_points(seed["paired_diff"]) for seed in seeds])
+    bound = float(gate["thresholds"]["paired_lower_bound_above"])
+    lowest = min(float(seed["paired_lo"]) for seed in seeds)
+    if all(float(seed["paired_lo"]) > bound for seed in seeds) and bound == 0:
+        interval = (
+            "with 95% intervals that stay above zero "
+            f"(lowest bound {fmt_points(lowest)})"
         )
-        musts.append(f"{fmt_count(seed['must_pass_correct'])}/{fmt_count(seed['must_pass_n'])}")
-        invalids.append(fmt_count(_n_invalid(seed["system"], seed["run_id"])))
+    else:
+        lows = _english_and([fmt_points(seed["paired_lo"]) for seed in seeds])
+        interval = f"with 95% interval lower bounds {lows}"
+    must_ns = {int(seed["must_pass_n"]) for seed in seeds}
+    corrects = [fmt_count(int(seed["must_pass_correct"])) for seed in seeds]
+    if len(must_ns) == 1:
+        must = f"{_english_and(corrects)} of {fmt_count(must_ns.pop())}"
+    else:
+        bits = [
+            f"{fmt_count(int(seed['must_pass_correct']))} of {fmt_count(int(seed['must_pass_n']))}"
+            for seed in seeds
+        ]
+        must = _english_and(bits)
+    invalids = [_n_invalid(seed["system"], seed["run_id"]) for seed in seeds]
+    if all(count == 0 for count in invalids):
+        invalid_text = "Invalid outputs: none."
+    else:
+        invalid_text = (
+            "Invalid outputs: "
+            + _english_and([fmt_count(count) for count in invalids])
+            + "."
+        )
+    every_seed = all(seed["g2"] and seed["g3"] and seed["g4"] for seed in seeds)
+    seed_lead = (
+        "Every seed clears every check."
+        if every_seed
+        else "Not every seed clears every check."
+    )
+    if champ["system"] == "tfidf_svm":
+        baseline = "a TF-IDF linear model"
+        linear_name = "The linear model"
+    else:
+        baseline = _display(champ["system"])
+        linear_name = _display(champ["system"])
+    if best == "claude_sonnet_5_5_retrieval":
+        best_phrase = "Sonnet 5.5 with retrieved examples"
+        best_cost_phrase = "Claude Sonnet 5.5 with retrieved examples"
+        best_rest_phrase = "Claude Sonnet 5.5"
+    else:
+        best_phrase = _display(best)
+        best_cost_phrase = _display(best)
+        best_rest_phrase = _display(best)
+    if ship["claude_rest"] < ship["accuracy_rest"]:
+        fallback = "A frontier fallback does not help."
+    elif ship["claude_rest"] > ship["accuracy_rest"]:
+        fallback = "A frontier fallback scores higher."
+    else:
+        fallback = "A frontier fallback matches it."
     summary, labels = _backlog_rows()
     n95 = sum(1 for row in labels if row["auto_95"] == "True")
     label_path = f"outputs/backlog/{summary['run_id']}/labels.csv"
+    data_cfg = _load_yaml(REPO_ROOT / "configs" / "data.yaml")
+    published_since = data_cfg["test_start"]
+    unlabelled = _read_jsonl(REPO_ROOT / "data" / "processed" / "unlabelled.jsonl")
+    if len(unlabelled) != int(summary["rows"]):
+        backlog_who = f"{fmt_count(int(summary['rows']))} CVEs in the backlog"
+    else:
+        backlog_who = (
+            f"{fmt_count(int(summary['rows']))} CVEs published since {published_since} "
+            "have no CWE from NVD, the vendor or CISA"
+        )
+    n_seeds = len(seeds)
     return "\n".join(
         [
             (
-                f"- Verdict {gate['verdict']}. Fine-tuned mean test accuracy "
-                f"{fmt_pct(gate['mean_accuracy'])}. Champion {champ['system']} "
-                f"{fmt_pct(champ['accuracy'])}. Best Claude run {best} "
-                f"{fmt_pct(best_acc)}. Pass line {fmt_pct(gate['g1_pass_line'])}."
+                f"- **Verdict: {gate['verdict']}.** On the locked test set the fine-tuned "
+                f"model scores {fmt_pct(gate['mean_accuracy'])} (mean of {n_seeds} seeds). "
+                f"The best baseline, {baseline}, scores {fmt_pct(champ['accuracy'])}. "
+                f"The best Claude run, {best_phrase}, scores {fmt_pct(best_acc)}. "
+                f"The pass line was {fmt_pct(gate['g1_pass_line'])}."
             ),
             (
-                "- Per-seed gains: "
-                + "; ".join(gains)
-                + f". Must-pass counts: {', '.join(musts)}. "
-                + f"Invalid outputs: {', '.join(invalids)}."
+                f"- **{seed_lead}** Gains over the best baseline: {gains} points, "
+                f"{interval}. Must-pass items: {must}. {invalid_text}"
             ),
             (
-                f"- At the dev 95% threshold on test, {shipped} auto-labels "
-                f"{fmt_pct(ship['auto_label_rate'])} of records at "
+                "- **What it labels on its own.** At the confidence threshold fixed on dev, "
+                f"it auto-labels {fmt_pct(ship['auto_label_rate'])} of test CVEs at "
                 f"{fmt_pct(ship['accuracy_auto'])} precision. "
-                f"{champ['system']} auto-labels {fmt_pct(linear['auto_label_rate'])} "
+                f"{linear_name} auto-labels {fmt_pct(linear['auto_label_rate'])} "
                 f"at {fmt_pct(linear['accuracy_auto'])} precision."
             ),
             (
-                f"- On the records {shipped} does not auto-label, its accuracy is "
-                f"{fmt_pct(ship['accuracy_rest'])} and {best} on those same records "
-                f"is {fmt_pct(ship['claude_rest'])}."
+                f"- **{fallback}** On the CVEs the fine-tuned model is unsure about, "
+                f"it scores {fmt_pct(ship['accuracy_rest'])} and {best_rest_phrase} scores "
+                f"{fmt_pct(ship['claude_rest'])}."
             ),
             (
-                f"- Cost per 1,000 records: {shipped} at concurrency 32 is "
-                f"{fmt_usd(level['cost_per_1000_usd'])}, and {best} is "
-                f"{fmt_usd(routing['claude_costs'][best]['cost_per_1000_usd'])}. "
+                "- **Cost per 1,000 CVEs:** "
+                f"{fmt_usd(level['cost_per_1000_usd'])} on one rented H100 at full use, "
+                f"against {fmt_usd(routing['claude_costs'][best]['cost_per_1000_usd'])} "
+                f"for {best_cost_phrase}. "
                 f"Prices read on {bench['gpu']['price_read_utc']}."
             ),
             (
-                f"- Backlog: {fmt_count(summary['rows'])} rows in "
-                f"{summary['wall_seconds']:.2f} seconds, GPU cost "
-                f"{fmt_usd(summary['gpu_cost_usd'])}, "
-                f"{fmt_count(n95)} rows at or above the dev 95% threshold. "
+                f"- **A usable output.** {backlog_who}. "
+                f"The model labelled all of them in {float(summary['wall_seconds']):,.2f} "
+                f"seconds for {fmt_usd(summary['gpu_cost_usd'])} of GPU time. "
+                f"{fmt_count(n95)} clear the confidence threshold: "
                 f"[labels.csv]({label_path})."
             ),
         ]
@@ -1023,7 +1163,13 @@ def _block_training(gate_cfg: dict) -> str:
             last_loss = float(run["dev_losses"][-1]["loss"])
             epochs = int(run["full_config"]["num_train_epochs"])
             rows.append(
-                [folder, str(epochs), f"{minutes:.1f}", fmt_sig(last_loss), fmt_pct(dev_acc)]
+                [
+                    _training_name(folder, epochs),
+                    str(epochs),
+                    f"{minutes:.1f}",
+                    fmt_sig(last_loss),
+                    fmt_pct(dev_acc),
+                ]
             )
         means[label] = sum(accs) / len(accs)
     one = means["1 epoch"]
@@ -1056,8 +1202,9 @@ def _block_serving(bench: dict) -> str:
         )
     gpu = bench["gpu"]
     note = (
-        f"GPU: {gpu['name']}. Price {fmt_usd(gpu['price_usd_per_hour'])} per hour, "
-        f"read on {gpu['price_read_utc']}. {gpu['price_source']}."
+        f"GPU: one {gpu['name']} on RunPod Secure Cloud, on-demand, "
+        f"{fmt_usd(gpu['price_usd_per_hour'])} per hour, "
+        f"read on the RunPod console on {gpu['price_read_utc']}."
     )
     table = _md(
         ["Concurrency", "Records per second", "Latency p50 ms", "Latency p95 ms", "USD per 1,000"],
@@ -1067,19 +1214,29 @@ def _block_serving(bench: dict) -> str:
 
 
 def _block_gate(gate: dict) -> str:
+    """Numbering is docs/ACCEPTANCE.md. G1 is the mean. The seed flags in
+    gate.json already follow that file: g2 noise, g3 must-pass, g4 validity.
+    """
     seeds = gate["seeds"]
-    headers = ["Gate", "Bar", *[seed["system"] for seed in seeds]]
+    headers = ["Gate", "Bar", *[_display(seed["system"]) for seed in seeds]]
     bar = gate["g1_pass_line"]
 
     def _flag(ok: bool) -> str:
         return "PASS" if ok else "FAIL"
 
-    g1 = ["G1 test accuracy", f">= {fmt_pct(bar)}"]
+    accuracy = ["Test accuracy", ""]
     for seed in seeds:
-        g1.append(f"{fmt_pct(seed['accuracy'])} {_flag(seed['accuracy'] >= bar)}")
-    g2 = ["G2 invalid rate", f"<= {fmt_pct(gate['thresholds']['invalid'])}"]
+        accuracy.append(fmt_pct(seed["accuracy"]))
+    mean = fmt_pct(gate["mean_accuracy"])
+    g1_flag = _flag(gate["g1"])
+    g1 = ["G1 gain", f"mean >= {fmt_pct(bar)}"]
+    for _seed in seeds:
+        g1.append(f"mean {mean} {g1_flag}")
+    bound = float(gate["thresholds"]["paired_lower_bound_above"])
+    g2_bar = "above 0" if bound == 0 else f"above {fmt_points(bound)}"
+    g2 = ["G2 noise", g2_bar]
     for seed in seeds:
-        g2.append(f"{fmt_pct(seed['invalid_rate'])} {_flag(seed['g2'])}")
+        g2.append(f"{fmt_points(seed['paired_lo'])} points {_flag(seed['g2'])}")
     g3 = ["G3 must-pass", f">= {fmt_pct(gate['thresholds']['must_pass'])}"]
     for seed in seeds:
         g3.append(
@@ -1087,21 +1244,17 @@ def _block_gate(gate: dict) -> str:
             f"({fmt_count(seed['must_pass_correct'])}/{fmt_count(seed['must_pass_n'])}) "
             f"{_flag(seed['g3'])}"
         )
-    bound = float(gate["thresholds"]["paired_lower_bound_above"])
-    g4_bar = "above 0" if bound == 0 else f"above {fmt_points(bound)}"
-    g4 = ["G4 paired lower bound", g4_bar]
+    g4 = ["G4 validity", f"<= {fmt_pct(gate['thresholds']['invalid'])}"]
     for seed in seeds:
-        g4.append(f"{fmt_points(seed['paired_lo'])} points {_flag(seed['g4'])}")
+        g4.append(f"{fmt_pct(seed['invalid_rate'])} {_flag(seed['g4'])}")
     sha, when = _acceptance()
     started = _first_candidate_test_utc(gate)
-    official = _flag(gate["g1"])
     note = (
-        f"Mean test accuracy {fmt_pct(gate['mean_accuracy'])}. "
-        f"G1 on that mean: {official}. Verdict: {gate['verdict']}. "
+        f"Verdict: {gate['verdict']}. "
         f"Acceptance commit {sha} at {when}. "
         f"First candidate test run started {started}."
     )
-    return _md(headers, [g1, g2, g3, g4]) + "\n\n" + note
+    return _md(headers, [accuracy, g1, g2, g3, g4]) + "\n\n" + note
 
 
 def _acc_cell(acc: float, ci: list | None) -> str:
@@ -1151,7 +1304,7 @@ def _block_main(gate: dict, gate_cfg: dict) -> str:
     ) / len(chosen)
     block = [
         _row(
-            "fine-tuned mean",
+            _display("fine-tuned mean"),
             fmt_pct(mean_dev),
             mean_acc,
             None,
@@ -1164,7 +1317,7 @@ def _block_main(gate: dict, gate_cfg: dict) -> str:
         metrics = doc["metrics"]
         block.append(
             _row(
-                system,
+                _display(system),
                 _dev_cell(system),
                 metrics["accuracy"],
                 metrics["accuracy_ci95"],
@@ -1177,7 +1330,7 @@ def _block_main(gate: dict, gate_cfg: dict) -> str:
         metrics = doc["metrics"]
         block.append(
             _row(
-                system,
+                _display(system),
                 _dev_cell(system),
                 metrics["accuracy"],
                 metrics["accuracy_ci95"],
@@ -1189,28 +1342,33 @@ def _block_main(gate: dict, gate_cfg: dict) -> str:
     for doc in others:
         metrics = doc["metrics"]
         rest.append(
-            _row(
+            (
                 doc["system"],
-                _dev_cell(doc["system"]),
-                metrics["accuracy"],
-                metrics["accuracy_ci95"],
-                metrics["invalid_rate"],
-                metrics["macro_f1"],
+                _row(
+                    _display(doc["system"]),
+                    _dev_cell(doc["system"]),
+                    metrics["accuracy"],
+                    metrics["accuracy_ci95"],
+                    metrics["invalid_rate"],
+                    metrics["macro_f1"],
+                ),
             )
         )
     insert = 0
     while insert < len(rest):
-        system = rest[insert][0]
-        acc = float(by_system[system]["metrics"]["accuracy"])
+        acc = float(by_system[rest[insert][0]]["metrics"]["accuracy"])
         if acc <= mean_acc:
             break
         insert += 1
-    rows = rest[:insert] + block + rest[insert:]
+    rows = [row for _, row in rest[:insert]] + block + [row for _, row in rest[insert:]]
     table = _md(
         ["System", "Dev accuracy", "Test accuracy", "Test invalid rate", "Test macro-F1"],
         rows,
     )
-    return table + "\n\nClaude runs are test only. The fine-tuned mean has no stored interval."
+    return (
+        table
+        + "\n\nClaude runs are test only. The mean of the seeds has no stored interval."
+    )
 
 
 def _mean_macro(systems: list[str]) -> float:
@@ -1221,7 +1379,7 @@ def _mean_macro(systems: list[str]) -> float:
 def _block_slices(analysis: dict) -> str:
     order = ("candidate", "champion", "best_claude")
     systems = [analysis["systems"][key] for key in order]
-    headers = ["Slice", "n", *[item["system"] for item in systems]]
+    headers = ["Slice", "n", *[_display(item["system"]) for item in systems]]
 
     def _rate(item: dict, key: str) -> str:
         return fmt_pct(item["slices"][key])
@@ -1258,8 +1416,8 @@ def _block_routing(view: dict, gate_cfg: dict) -> str:
             row = view[name][key]
             rows.append(
                 [
-                    name,
-                    key,
+                    _display(name),
+                    _threshold_name(key),
                     fmt_pct(row["dev_coverage"]),
                     fmt_pct(row["dev_precision"]),
                     fmt_pct(row["auto_label_rate"]),
@@ -1287,25 +1445,55 @@ def _block_routing(view: dict, gate_cfg: dict) -> str:
 
 def _block_cost(routing: dict, view: dict, gate_cfg: dict, bench: dict) -> str:
     shipped = gate_cfg["candidate"]["shipped"]
-    level = next(row for row in bench["levels"] if int(row["concurrency"]) == 32)
-    rows = [[f"{shipped} concurrency 32", fmt_usd(level["cost_per_1000_usd"])]]
+    level = max(bench["levels"], key=lambda row: float(row["records_per_second"]))
+    shipped_name = _display(shipped)
+    rows = [
+        [
+            f"{shipped_name}, concurrency {int(level['concurrency'])}",
+            fmt_usd(level["cost_per_1000_usd"]),
+        ]
+    ]
     for name, doc in routing["claude_costs"].items():
-        rows.append([name, fmt_usd(doc["cost_per_1000_usd"])])
+        rows.append([_display(name), fmt_usd(doc["cost_per_1000_usd"])])
     for key in sorted(view[shipped]):
         cost = view[shipped][key]["cost"]["cascade"]
-        rows.append([f"{shipped} cascade {key}", fmt_usd(cost)])
-    rows.append([gate_cfg["champion"]["system"], _CPU_COST_NOTE])
+        rows.append([f"{shipped_name} cascade, {_threshold_name(key)}", fmt_usd(cost)])
+    rows.append([_display(gate_cfg["champion"]["system"]), _CPU_COST_NOTE])
     price = routing["gpu_price_usd_per_hour"]
     hours = routing["hours_per_month"]
     even_rows = []
+    volumes = []
     for name, volume in routing["break_even_records_per_month"].items():
         whole = Decimal(str(volume)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        even_rows.append([name, fmt_count(int(whole))])
+        even_rows.append([_display(name), fmt_count(int(whole))])
+        volumes.append(Decimal(str(volume)))
     summary, _labels = _backlog_rows()
+    stats = json.loads((REPO_ROOT / "data" / "processed" / "stats.json").read_text())
+    data_cfg = _load_yaml(REPO_ROOT / "configs" / "data.yaml")
+    serve_cfg = _load_yaml(REPO_ROOT / "configs" / "serve.yaml")
+    window = _test_window_rate(stats, data_cfg, serve_cfg)
+    if volumes and all(window["per_month"] < volume for volume in volumes):
+        relation = "That is below every break-even volume."
+    else:
+        over = [
+            _display(name)
+            for name, volume in routing["break_even_records_per_month"].items()
+            if window["per_month"] >= Decimal(str(volume))
+        ]
+        relation = (
+            "That is not below the break-even volume for " + _english_and(over) + "."
+            if over
+            else "There is no break-even volume to compare."
+        )
+    month_hours = fmt_count(int(serve_cfg["hours_per_month"]))
     note = (
         f"Break-even is the monthly volume at which a GPU left on for {fmt_sig(hours, 3)} "
         f"hours at {fmt_usd(price)} per hour costs the same as that Claude run. "
-        f"Backlog batch GPU cost: {fmt_usd(summary['gpu_cost_usd'])}."
+        f"Backlog batch GPU cost: {fmt_usd(summary['gpu_cost_usd'])}. "
+        f"The test window averages {fmt_count(window['per_month_whole'])} CVEs per month "
+        f"({fmt_count(window['records'])} records, {fmt_count(window['days'])} days from "
+        f"{window['start']} to {window['end']}, the latest publication in the locked test "
+        f"set and the unlabelled backlog, a month of {month_hours} hours). {relation}"
     )
     return (
         _md(["System", "USD per 1,000"], rows)
@@ -1314,6 +1502,40 @@ def _block_cost(routing: dict, view: dict, gate_cfg: dict, bench: dict) -> str:
         + "\n\n"
         + note
     )
+
+
+def _test_window_rate(stats: dict, data_cfg: dict, serve_cfg: dict) -> dict:
+    """CVEs per month in the coverage test window.
+
+    The month is the one the break-even table uses: hours_per_month / 24,
+    which is 365/12 days. The end date is the latest publication stored for
+    a committed record in the window (the locked test set or the unlabelled
+    backlog). The raw feeds are not in git, so a later feed record is not
+    visible here.
+    """
+    records = int(stats["coverage_pre_rule_2"]["test_window"]["records"])
+    start = date.fromisoformat(data_cfg["test_start"])
+    dates = [stats["splits"]["test"]["date_range"][1]]
+    for row in _read_jsonl(REPO_ROOT / "data" / "processed" / "unlabelled.jsonl"):
+        day = row["published"][:10]
+        if day < data_cfg["test_start"]:
+            raise SystemExit("report: unlabelled record is before the test window")
+        dates.append(day)
+    end = date.fromisoformat(max(dates))
+    days = (end - start).days
+    if days <= 0:
+        raise SystemExit("report: test window has no length")
+    month_days = Decimal(str(serve_cfg["hours_per_month"])) / Decimal(24)
+    per_month = Decimal(records) / (Decimal(days) / month_days)
+    whole = per_month.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return {
+        "records": records,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "days": days,
+        "per_month": per_month,
+        "per_month_whole": int(whole),
+    }
 
 
 def _backlog_rows() -> tuple[dict, list[dict]]:
@@ -1399,6 +1621,25 @@ def _block_demo() -> str:
     return table + "\n\n" + note
 
 
+def _dashboard() -> dict:
+    path = REPO_ROOT / "results" / "dashboard_check.json"
+    doc = json.loads(path.read_text())
+    for key in ("source", "runpod", "anthropic_console"):
+        if key not in doc:
+            raise SystemExit(f"report: dashboard_check.json missing {key}")
+    return doc
+
+
+def _console_sums(spend: dict) -> dict[str, float]:
+    buckets = {"sonnet_5_5": 0.0, "haiku_5_5": 0.0}
+    for run in spend["claude"]["runs"]:
+        matched = [key for key in buckets if key in run["system"]]
+        if len(matched) != 1:
+            raise SystemExit(f"report: cannot place {run['system']} on the console check")
+        buckets[matched[0]] += float(run["cost_usd"])
+    return buckets
+
+
 def _block_spend(spend: dict) -> str:
     gpu = spend["gpu"]
     idle = float(gpu["billed_minus_recorded_hours"]) / float(gpu["hours_so_far"])
@@ -1408,8 +1649,9 @@ def _block_spend(spend: dict) -> str:
         purpose_rows.append([name, seconds, fmt_count(len(block["runs"]))])
     claude_rows = []
     for run in spend["claude"]["runs"]:
-        claude_rows.append([run["system"], fmt_usd(run["cost_usd"])])
+        claude_rows.append([_display(run["system"]), fmt_usd(run["cost_usd"])])
     total = float(gpu["total_usd"]) + float(spend["claude"]["total_usd"])
+    opened = f"As of {spend['written_utc']}. The pod was still running."
     lead = (
         f"GPU {gpu['gpu']}: {float(gpu['hours_so_far']):.3f} hours, "
         f"{fmt_usd(gpu['total_usd'])}. "
@@ -1419,14 +1661,53 @@ def _block_spend(spend: dict) -> str:
         f"Claude total {fmt_usd(spend['claude']['total_usd'])}. "
         f"GPU plus Claude: {fmt_usd(total)}."
     )
-    return (
-        lead
-        + "\n\n"
-        + _md(["Purpose", "Seconds", "Runs"], purpose_rows)
-        + "\n\n"
-        + _md(["Claude run", "USD"], claude_rows)
-        + "\n\n"
-        + tail
+    dash = _dashboard()
+    runpod = dash["runpod"]
+    loaded = Decimal(str(runpod["loaded_usd"]))
+    balance = Decimal(str(runpod["balance_usd"]))
+    rate = Decimal(str(runpod["spend_rate_usd_per_hour"]))
+    uptime = runpod["pod_uptime"]
+    priced = _uptime_hours(uptime) * rate
+    runpod_line = (
+        f"RunPod, read {runpod['read_utc']}: spent {_fmt_cents(loaded - balance)} "
+        f"(loaded {_fmt_cents(loaded)} minus balance {_fmt_cents(balance)}), "
+        f"next to {_fmt_cents(priced)} for uptime {uptime} at {_fmt_rate(rate)} per hour."
+    )
+    console = dash["anthropic_console"]
+    sums = _console_sums(spend)
+    names = {
+        "sonnet_5_5": "Claude Sonnet 5.5",
+        "haiku_5_5": "Claude Haiku 5.5",
+    }
+    bits = []
+    for key, label in names.items():
+        reading = Decimal(str(console[f"{key}_usd"]))
+        bits.append(
+            f"{label} {_fmt_cents(reading)} next to {fmt_usd(sums[key])} from the run files"
+        )
+    console_line = (
+        f"Anthropic console for {console['date']}, data as of {console['data_as_of_utc']}: "
+        + "; ".join(bits)
+        + "."
+    )
+    source = dash["source"][:1].upper() + dash["source"][1:] + "."
+    difference = (
+        "The difference is calls that wrote no run file, such as the 30-record sanity checks."
+    )
+    scope = "This table covers experiment compute. It excludes the coding agents."
+    return "\n\n".join(
+        [
+            opened,
+            lead,
+            _md(["Purpose", "Seconds", "Runs"], purpose_rows),
+            _md(["Claude run", "USD"], claude_rows),
+            tail,
+            source,
+            runpod_line,
+            console_line,
+            difference,
+            scope,
+        ]
     )
 
 
