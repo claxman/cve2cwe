@@ -136,6 +136,31 @@ Runs are tracked in Weights & Biases: https://wandb.ai/chaitanyalaxman118-chaita
 
 **Left out on purpose: DPO and GRPO.** Supervised fine-tuning came first because every training record has one known answer and tens of thousands are available. Preference tuning (DPO) needs pairs of a better and a worse answer for the same CVE. The confusion table in the results is where those pairs would come from, and it is worth trying only once supervised training stops improving. Reward-based tuning (GRPO) pays off when the reward says more than right or wrong, for example partial credit for a parent or child CWE, or when there are no labels but there is a checker. With exact-match labels it would add cost and instability for no clear gain. Neither was run here.
 
+## Ablations (dev only, added on 2026-11-25 after submission)
+
+These runs change one thing at a time against the shipped recipe. They are scored on dev only. The test set, the gate and the shipped model are unchanged. Each is one seed, so differences under about one point are noise.
+
+The runs were made on a second H100 pod, with the environment rebuilt from the pinned requirement files. The control row repeats the shipped recipe in that environment.
+
+<!-- BEGIN table:ablations -->
+| Run | What changed | Train rows | Epochs | Training minutes | Peak GPU GiB | Last dev loss | Dev accuracy | Difference to the shipped seed on dev |
+|---|---|---|---|---|---|---|---|---|
+| ctrl | Nothing. The shipped recipe, rerun in this environment | 42,291 | 2 | 19.0 | 17.63 | 0.05591 | 88.5% (87.3% to 89.7%) | -0.3 points (-0.8 to +0.2) |
+| frac05 | 5% of train rows | 2,115 | 2 | 3.0 | 14.30 | 0.08934 | 85.2% (83.9% to 86.5%) | -3.6 points (-4.6 to -2.6) |
+| frac10 | 10% of train rows | 4,229 | 2 | 2.8 | 16.62 | 0.07741 | 87.1% (85.9% to 88.4%) | -1.7 points (-2.5 to -0.8) |
+| frac30 | 30% of train rows | 12,687 | 2 | 6.4 | 17.64 | 0.06898 | 88.2% (87.0% to 89.5%) | -0.6 points (-1.3 to +0.2) |
+| frac10-e6 | 10% of train rows, 6 epochs | 4,229 | 6 | 6.0 | 16.62 | 0.1306 | 85.5% (84.2% to 86.8%) | -3.3 points (-4.2 to -2.4) |
+| r4 | LoRA rank 4, alpha 4 | 42,291 | 2 | 19.8 | 17.39 | 0.05677 | 88.3% (87.1% to 89.5%) | -0.5 points (-1.1 to +0.0) |
+| r64 | LoRA rank 64, alpha 64 | 42,291 | 2 | 19.1 | 18.58 | 0.05606 | 88.5% (87.4% to 89.7%) | -0.3 points (-0.9 to +0.4) |
+| qlora4bit | 4-bit QLoRA | 42,291 | 2 | 19.9 | 12.72 | 0.05666 | 88.9% (87.7% to 90.1%) | +0.1 points (-0.5 to +0.7) |
+| shipped seed 1 | reference | 42,291 | 2 | 18.6 | 17.63 | 0.05345 | 88.8% (87.6% to 90.0%) | same checkpoint |
+| TF-IDF + linear SVM | reference |  |  |  |  |  | 86.7% (85.5% to 88.0%) | -2.1 points (-3.1 to -1.1) |
+| base model with retrieved examples | reference |  |  |  |  |  | 78.0% (76.4% to 79.6%) | -10.8 points (-12.1 to -9.5) |
+| base model zero-shot | reference |  |  |  |  |  | 67.3% (65.5% to 69.0%) | -21.5 points (-23.2 to -19.9) |
+<!-- END table:ablations -->
+
+FINDINGS_PLACEHOLDER
+
 ## Inference
 
 - The adapter is merged into the base weights and served with vLLM as a standalone checkpoint. Every Qwen score in this repo, base or fine-tuned, went through the same client. The Claude runs use the Anthropic API with the same prompts.

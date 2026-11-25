@@ -153,6 +153,21 @@ Champion: the system other than the candidate with the highest accuracy on the l
 - Shipped checkpoint: the seed with the median dev accuracy.
 - Target: one seed trains in under an hour on one rented GPU.
 
+## Ablations
+
+Eight one-seed runs, added after submission. Each changes one thing against the shipped recipe and is scored on dev only. The test set, the gate and the shipped model are unchanged. Differences under about one point are noise.
+
+- ctrl: nothing. The shipped recipe, rerun in a rebuilt environment.
+- frac05: 5% of the train rows, 2 epochs.
+- frac10: 10% of the train rows, 2 epochs.
+- frac30: 30% of the train rows, 2 epochs.
+- frac10-e6: 10% of the train rows, 6 epochs.
+- r4: LoRA rank 4, alpha 4.
+- r64: LoRA rank 64, alpha 64.
+- qlora4bit: 4-bit QLoRA. The adapter is merged into the bf16 base before scoring. This is an exception to the bf16 choice above. It does not change the shipped model.
+
+The overrides live in configs/ablations/. A run whose name starts with ablation_ is refused on the test split.
+
 ## 8. Inference and serving
 
 - The adapter is merged into the base weights and saved as a standalone bf16 checkpoint.
@@ -341,3 +356,4 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: Added src/cve2cwe/report.py. `--analysis` writes results/error_analysis.json, `--routing` writes results/routing.json from prediction files and the concurrency-32 benchmark cost, `--spend` writes results/spend.json.
 - 2026-11-24: The notebook fallback in section 11 was not built. The laptop demo works, so the fallback was not needed.
 - 2026-11-24: The README carries the DPO and GRPO paragraph promised in section 13. Neither method was run.
+- 2026-11-25: Added an Ablations section. Eight one-seed runs change one training choice at a time and are scored on dev only. The test set, the gate and the shipped model are unchanged. The 4-bit run is merged into the bf16 base before that dev score.

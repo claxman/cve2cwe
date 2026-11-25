@@ -1,0 +1,61 @@
+{
+  "base_model": "Qwen/Qwen3.5-4B",
+  "base_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "counts": {
+    "errors_retried_but_failed": 0,
+    "invalid_context_length": 0,
+    "invalid_total": 0,
+    "total": 2759,
+    "valid": 2759
+  },
+  "few_shot_examples": null,
+  "finished_utc": "2026-11-25T15:37:16Z",
+  "git_commit": "681786e95e9aec81703c5e3afdfbc799577fc62b",
+  "git_dirty": false,
+  "input_path": null,
+  "package_versions": {
+    "httpx": "0.28.1",
+    "numpy": "2.2.6",
+    "openai": "2.24.0",
+    "pyyaml": "6.0.4",
+    "scikit-learn": null,
+    "scipy": null
+  },
+  "prompt_name": "candidate",
+  "repeat_check": {
+    "count": 0,
+    "mismatches": [],
+    "passed": true
+  },
+  "request_settings": {
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "concurrency": 16,
+    "logprobs": true,
+    "max_tokens": 8,
+    "temperature": 0.0
+  },
+  "run_id": "20261125T153641Z-681786e",
+  "served_model": "ablation_r4",
+  "split": "dev",
+  "started_utc": "2026-11-25T15:36:41Z",
+  "system": "ablation_r4",
+  "systems_config": {
+    "few_shot": {
+      "max_example_chars": 400,
+      "num_examples": 8
+    },
+    "max_description_chars": 2000,
+    "retrieval": {
+      "max_example_chars": 600,
+      "num_examples": 5
+    }
+  },
+  "token_usage": {
+    "completion_tokens": 18241,
+    "prompt_tokens": 592496
+  },
+  "wall_seconds": 34.2
+}

@@ -1849,11 +1849,7 @@ def _diff_cell(diff: dict) -> str:
 
 
 def _block_ablations() -> str:
-    """Dev-only ablation table.
-
-    Not listed in _README_BLOCKS until the runs exist. The marker check
-    requires the README section and these result files together.
-    """
+    """Dev-only ablation table. One seed per row, compared with the shipped seed."""
     gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
     shipped = gate_cfg["candidate"]["shipped"]
     if shipped != "candidate_e2-seed1":
@@ -1922,6 +1918,7 @@ _README_BLOCKS = (
     "facts:coverage",
     "facts:data",
     "table:training",
+    "table:ablations",
     "table:serving",
     "table:demo",
     "table:gate",
@@ -1950,6 +1947,7 @@ def _readme_blocks() -> dict[str, str]:
         "facts:coverage": _block_coverage(stats),
         "facts:data": _block_data(stats),
         "table:training": _block_training(gate_cfg),
+        "table:ablations": _block_ablations(),
         "table:serving": _block_serving(_bench),
         "table:gate": _block_gate(gate),
         "table:main": _block_main(gate, gate_cfg),
