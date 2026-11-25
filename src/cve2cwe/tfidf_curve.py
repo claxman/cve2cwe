@@ -11,12 +11,7 @@ import json
 from cve2cwe import baselines, runinfo
 from cve2cwe.ablations import ablation_path, load_override, sample_train_fraction
 from cve2cwe.baselines import _load_split_descs, _run_id, _write_prediction_dir
-from cve2cwe.prompts import (
-    REPO_ROOT,
-    cut_description,
-    load_prompts_cfg,
-    load_systems_cfg,
-)
+from cve2cwe.prompts import REPO_ROOT, cut_description, load_systems_cfg
 
 # The three fractions that have a fine-tuned ablation. The full-data TF-IDF
 # run already exists and is not repeated here.
@@ -59,9 +54,9 @@ def run(argv: list[str] | None = None) -> int:
             "tfidf-curve: git tree is dirty outside outputs/ and results/. "
             "Refusing to write a run."
         )
-    prompts = load_prompts_cfg()
-    max_chars = int(prompts["max_description_chars"])
-    tfidf_cfg = load_systems_cfg()["tfidf"]
+    systems = load_systems_cfg()
+    max_chars = int(systems["max_description_chars"])
+    tfidf_cfg = systems["tfidf"]
     c_values = [float(c) for c in tfidf_cfg["c_values"]]
     dev_rows = _load_split_descs("dev", max_chars)
     # The fraction seed only picks rows. C is chosen with the baseline seed,
