@@ -175,6 +175,15 @@ def test_guard_allows_candidate_on_dev():
     guard_test_split_candidate("candidate_seed1", "dev")
 
 
+def test_guard_refuses_ablation_on_test():
+    with pytest.raises(SystemExit, match="ablation_"):
+        guard_test_split_candidate("ablation_frac10", "test")
+
+
+def test_guard_allows_ablation_on_dev():
+    guard_test_split_candidate("ablation_frac10", "dev")
+
+
 def test_guard_refuses_candidate_on_test_without_final_acceptance(tmp_path, monkeypatch):
     # Point the guard at a temporary repo tree so the real ACCEPTANCE.md is
     # untouched.

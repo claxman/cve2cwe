@@ -1,0 +1,6 @@
+# 30% of the training rows, two epochs.
+run_tag: frac30
+train_fraction: 0.30
+fraction_seed: 1
+num_train_epochs: 2
+what_changed: "30% of train rows"

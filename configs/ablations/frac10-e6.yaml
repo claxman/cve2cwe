@@ -1,0 +1,6 @@
+# Same 10% of rows as frac10, six epochs instead of two.
+run_tag: frac10-e6
+train_fraction: 0.10
+fraction_seed: 1
+num_train_epochs: 6
+what_changed: "10% of train rows, 6 epochs"

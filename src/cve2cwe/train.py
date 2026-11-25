@@ -13,6 +13,9 @@ DESIGN section 7 is the spec. Four modes are exposed on the command line:
   --seed N            full training run on seed N using configs/train.yaml.
                       Writes run.json at the start and completes it at the
                       end. Saves the adapter at the end of every epoch.
+  --override FILE     with --seed only. FILE is configs/ablations/<name>.yaml.
+                      It overrides the shipped recipe and sets run_tag.
+                      run.json records the file path and its sha256.
 
 All modes share the exact same data path, tokeniser, prompt construction
 and loss mask.  Runs on the GPU pod inside the .venv-train environment.
@@ -47,6 +50,7 @@ from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import train_on_responses_only
 
+from cve2cwe.ablations import load_train_config, sample_train_fraction
 from cve2cwe.prompts import (
     load_prompts_cfg,
     load_systems_cfg,
@@ -220,8 +224,8 @@ def _load_base(train_cfg: dict, max_seq_length: int):
         model_name=train_cfg["base_model"],
         revision=train_cfg["revision"],
         max_seq_length=max_seq_length,
-        load_in_4bit=False,
-        load_in_16bit=True,
+        load_in_4bit=bool(train_cfg["load_in_4bit"]),
+        load_in_16bit=bool(train_cfg["load_in_16bit"]),
         full_finetuning=False,
     )
     return model, tokenizer
@@ -638,9 +642,9 @@ def _run_name(train_cfg: dict, seed: int) -> str:
     return f"{tag}-seed{seed}" if tag else f"seed{seed}"
 
 
-def mode_seed(seed: int) -> int:
+def mode_seed(seed: int, override: Path | None = None) -> int:
     """Full training run for one seed. Writes run.json at start and end."""
-    train_cfg = _load_cfg(REPO_ROOT / "configs" / "train.yaml")
+    train_cfg, override_meta = load_train_config(override)
     prompts = load_prompts_cfg()
     systems = load_systems_cfg()
     start_utc = _utc_now_iso()
@@ -675,6 +679,8 @@ def mode_seed(seed: int) -> int:
         "git_dirty": git_dirty,
         "package_versions": _package_versions(),
         "full_config": train_cfg,
+        "override_file": None if override_meta is None else override_meta["path"],
+        "override_sha256": None if override_meta is None else override_meta["sha256"],
         "systems": systems,
         "prompts": prompts,
         "status": "running",
@@ -683,6 +689,18 @@ def mode_seed(seed: int) -> int:
     print(f"[train] wrote initial {run_json_path}")
 
     train_rows, dev_rows = _load_data()
+    if train_cfg.get("train_fraction") is not None:
+        before = len(train_rows)
+        train_rows = sample_train_fraction(
+            train_rows,
+            float(train_cfg["train_fraction"]),
+            int(train_cfg["fraction_seed"]),
+        )
+        print(
+            f"[train] train_fraction={train_cfg['train_fraction']} "
+            f"fraction_seed={train_cfg['fraction_seed']} "
+            f"rows={len(train_rows)} of {before}"
+        )
     max_sl = int(train_cfg["max_seq_length"])
 
     model, tokenizer = _load_base(train_cfg, max_seq_length=max_sl)
@@ -806,6 +824,7 @@ def mode_seed(seed: int) -> int:
             "wandb": _wandb_info(train_cfg["wandb"]["project"], run_name),
             "run_tag": train_cfg.get("run_tag") or "",
             "run_name": run_name,
+            "train_row_count": len(train_rows),
         }
     )
     run_json_path.write_text(json.dumps(completed, indent=2) + "\n")
@@ -824,6 +843,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--memory-check-n", type=int, default=32)
     ap.add_argument("--probe", action="store_true")
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument(
+        "--override",
+        type=Path,
+        default=None,
+        help="configs/ablations/<name>.yaml, used only with --seed",
+    )
     args = ap.parse_args(argv)
 
     modes = sum(bool(x) for x in [args.profile_lengths, args.memory_check, args.probe, args.seed])
@@ -833,6 +858,9 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.override is not None and args.seed is None:
+        print("train: --override is only valid with --seed", file=sys.stderr)
+        return 2
 
     if args.profile_lengths:
         return mode_profile_lengths()
@@ -840,7 +868,7 @@ def main(argv: list[str] | None = None) -> int:
         return mode_memory_check(n_examples=int(args.memory_check_n))
     if args.probe:
         return mode_probe()
-    return mode_seed(seed=int(args.seed))
+    return mode_seed(seed=int(args.seed), override=args.override)
 
 
 if __name__ == "__main__":

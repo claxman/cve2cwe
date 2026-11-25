@@ -35,6 +35,9 @@ Usage:
   scripts/pod.sh train-seeds       Freeze the committed tree into /workspace/run-<short hash>/ and
                                    launch seeds 1,2,3 sequentially in a detached tmux session
                                    (stops on first failure).
+  scripts/pod.sh train-ablations <name> [name...]
+                                   Same freeze, then train seed 1 once per
+                                   configs/ablations/<name>.yaml, in order.
 EOF
 }
 
@@ -97,6 +100,30 @@ case "$cmd" in
         HASH=$(git -C "$ROOT" rev-parse --short HEAD)
         echo "pod.sh: launching training for commit $HASH"
         "${SSH_CMD[@]}" "bash /workspace/cve2cwe/scripts/pod_train_seeds.sh '$HASH'"
+        ;;
+    train-ablations)
+        if [ "$#" -eq 0 ]; then
+            echo "pod.sh train-ablations: needs at least one override name" >&2
+            exit 2
+        fi
+        dirty=$(git -C "$ROOT" status --porcelain)
+        if [ -n "$dirty" ]; then
+            echo "pod.sh: working tree is dirty. Commit before launching training:" >&2
+            echo "$dirty" >&2
+            exit 2
+        fi
+        HASH=$(git -C "$ROOT" rev-parse --short HEAD)
+        remote_names=""
+        for name in "$@"; do
+            if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+                echo "pod.sh: bad override name: $name" >&2
+                exit 2
+            fi
+            remote_names+=$(printf ' %q' "$name")
+        done
+        echo "pod.sh: launching ablations for commit $HASH:$remote_names"
+        # shellcheck disable=SC2086
+        "${SSH_CMD[@]}" "bash /workspace/cve2cwe/scripts/pod_train_ablations.sh '$HASH'$remote_names"
         ;;
     -h|--help|help|"")
         usage

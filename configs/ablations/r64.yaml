@@ -1,0 +1,6 @@
+# LoRA rank 64. Epochs, data and precision stay at the shipped recipe.
+run_tag: r64
+lora:
+  r: 64
+  alpha: 64
+what_changed: "LoRA rank 64, alpha 64"

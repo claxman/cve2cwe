@@ -18,6 +18,7 @@ DESIGN section 8 (Inference and serving) and Step 7 work order, section C.
 Guard: a system named ``candidate_*`` is refused on the test split unless
 ``docs/ACCEPTANCE.md`` contains a ``Status: final`` line, ``configs/gate.yaml``
 exists, and both are committed and unmodified (DESIGN section 9).
+A system named ``ablation_*`` is always refused on the test split.
 """
 
 from __future__ import annotations
@@ -206,7 +207,15 @@ def resolve_retrieval_examples(
 def guard_test_split_candidate(name: str, split: str) -> None:
     """Raise SystemExit if a candidate_* system is run on the test split
     before the acceptance bar and gate config are committed as final.
+
+    An ablation_* name is refused on the test split with no exception.
+    Ablations are dev-only and do not move the gate.
     """
+    if split == "test" and name.startswith("ablation_"):
+        raise SystemExit(
+            "llm-eval: an ablation_* run on the test split is refused. "
+            "Ablations are scored on dev only."
+        )
     if not name.startswith("candidate_"):
         return
     if split != "test":

@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from cve2cwe import runinfo
+from cve2cwe.ablations import ABLATION_NAMES, ablation_path, load_override
 from cve2cwe.prompts import REPO_ROOT, load_systems_cfg
 from cve2cwe.scorer import _read_jsonl, compute_metrics, load_label_set, parse
 
@@ -1792,6 +1793,128 @@ def _block_spend(spend: dict) -> str:
             scope,
         ]
     )
+
+
+def _train_metric_cells(run: dict | None) -> list[str]:
+    if run is None:
+        return ["", "", "", "", ""]
+    count = run.get("train_row_count")
+    if count is None:
+        count = int(run["lengths"]["train"]["count"])
+    epochs = int(run["full_config"]["num_train_epochs"])
+    minutes = float(run["training_seconds"]) / 60.0
+    peak = float(run["peak_gpu_memory_gib"])
+    loss = float(run["dev_losses"][-1]["loss"])
+    return [
+        fmt_count(int(count)),
+        str(epochs),
+        f"{minutes:.1f}",
+        f"{peak:.2f}",
+        fmt_sig(loss),
+    ]
+
+
+def _paired_against(system: str, other: str) -> dict:
+    """Dev paired difference of system minus other. One stored file, either order."""
+    folder = REPO_ROOT / "results" / "paired" / "dev"
+    system_doc = _one_result(system, "dev")
+    other_doc = _one_result(other, "dev")
+    found: list[tuple[int, dict]] = []
+    if folder.is_dir():
+        for path in sorted(folder.glob("*.json")):
+            doc = json.loads(path.read_text())
+            a_name, b_name = doc["a"]["system"], doc["b"]["system"]
+            a_run, b_run = doc["a"]["run_id"], doc["b"]["run_id"]
+            if a_name == system and b_name == other:
+                if a_run == system_doc["run_id"] and b_run == other_doc["run_id"]:
+                    found.append((1, doc))
+            elif a_name == other and b_name == system:
+                if a_run == other_doc["run_id"] and b_run == system_doc["run_id"]:
+                    found.append((-1, doc))
+    if len(found) != 1:
+        raise SystemExit(f"report: {system} vs {other} on dev has {len(found)} paired files")
+    sign, doc = found[0]
+    lo = float(doc["diff_accuracy_ci95"][0])
+    hi = float(doc["diff_accuracy_ci95"][1])
+    if sign < 0:
+        lo, hi = -hi, -lo
+    return {"diff": sign * float(doc["diff_accuracy"]), "lo": lo, "hi": hi}
+
+
+def _diff_cell(diff: dict) -> str:
+    return (
+        f"{fmt_points(diff['diff'])} points "
+        f"({fmt_points(diff['lo'])} to {fmt_points(diff['hi'])})"
+    )
+
+
+def _block_ablations() -> str:
+    """Dev-only ablation table.
+
+    Not listed in _README_BLOCKS until the runs exist. The marker check
+    requires the README section and these result files together.
+    """
+    gate_cfg = _load_yaml(REPO_ROOT / "configs" / "gate.yaml")
+    shipped = gate_cfg["candidate"]["shipped"]
+    if shipped != "candidate_e2-seed1":
+        raise SystemExit(f"report: ablations compare with the shipped seed, found {shipped}")
+    headers = [
+        "Run",
+        "What changed",
+        "Train rows",
+        "Epochs",
+        "Training minutes",
+        "Peak GPU GiB",
+        "Last dev loss",
+        "Dev accuracy",
+        "Difference to the shipped seed on dev",
+    ]
+    rows = []
+    for name in ABLATION_NAMES:
+        override = load_override(ablation_path(name))
+        folder = f"{name}-seed1"
+        run_path = REPO_ROOT / "outputs" / "train" / folder / "run.json"
+        if not run_path.is_file():
+            raise SystemExit(f"report: missing training run {run_path}")
+        run = json.loads(run_path.read_text())
+        if int(run["seed"]) != 1:
+            raise SystemExit(f"report: {folder} is not seed 1")
+        system = f"ablation_{name}"
+        metrics = _one_result(system, "dev")["metrics"]
+        rows.append(
+            [
+                name,
+                str(override["what_changed"]),
+                *_train_metric_cells(run),
+                _acc_cell(float(metrics["accuracy"]), metrics["accuracy_ci95"]),
+                _diff_cell(_paired_against(system, shipped)),
+            ]
+        )
+    shipped_run = json.loads(
+        (REPO_ROOT / "outputs" / "train" / "e2-seed1" / "run.json").read_text()
+    )
+    references = (
+        (shipped, "shipped seed 1", shipped_run),
+        ("tfidf_svm", "TF-IDF + linear SVM", None),
+        ("qwen35_4b_retrieval", "base model with retrieved examples", None),
+        ("qwen35_4b_zero_shot", "base model zero-shot", None),
+    )
+    for system, label, run in references:
+        metrics = _one_result(system, "dev")["metrics"]
+        if system == shipped:
+            difference = "same checkpoint"
+        else:
+            difference = _diff_cell(_paired_against(system, shipped))
+        rows.append(
+            [
+                label,
+                "reference",
+                *_train_metric_cells(run),
+                _acc_cell(float(metrics["accuracy"]), metrics["accuracy_ci95"]),
+                difference,
+            ]
+        )
+    return _md(headers, rows)
 
 
 _README_BLOCKS = (

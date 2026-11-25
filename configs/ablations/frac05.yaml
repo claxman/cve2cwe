@@ -1,0 +1,6 @@
+# 5% of the training rows, two epochs. Everything else is the shipped recipe.
+run_tag: frac05
+train_fraction: 0.05
+fraction_seed: 1
+num_train_epochs: 2
+what_changed: "5% of train rows"

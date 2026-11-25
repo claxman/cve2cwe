@@ -1,0 +1,5 @@
+# Train the adapter on 4-bit weights. Merge still targets the bf16 base.
+run_tag: qlora4bit
+load_in_4bit: true
+load_in_16bit: false
+what_changed: "4-bit QLoRA"
