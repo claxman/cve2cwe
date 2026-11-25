@@ -28,11 +28,12 @@ Should labelling a CVE with its CWE weakness type move from a frontier model to 
 
 **Next steps.**
 
-1. Non-kernel CVEs: more recent non-kernel training data, and a check of whether crediting a parent or child CWE changes the picture.
-2. Label disagreement: the learning curve is flat from 30% of the data, so more labels of the same kind will not help. Use the CISA label as a second opinion where it exists, in training and in evaluation.
-3. Preference tuning (DPO) on the most frequent confusions, only if supervised fine-tuning stops improving.
-4. A cheaper recipe: in single runs on dev, 4-bit training matched the shipped recipe and rank 4 was within half a point. Confirm them together on three seeds, through the same gate, before using them.
-5. What production still needs: monitoring, drift alarms, threshold recalibration and a retraining schedule.
+1. A fine-tuned encoder classifier as a second trained baseline. On a closed list of 53 labels it may match the fine-tuned model at a lower serving cost. It has not been tried here.
+2. Non-kernel CVEs: more recent non-kernel training data, and a check of whether crediting a parent or child CWE changes the picture.
+3. Label disagreement: the learning curve is flat from 30% of the data, so more labels of the same kind will not help. Use the CISA label as a second opinion where it exists, in training and in evaluation.
+4. Preference tuning (DPO) on the most frequent confusions, only if supervised fine-tuning stops improving.
+5. A cheaper recipe: in single runs on dev, 4-bit training matched the shipped recipe and rank 4 was within half a point. Confirm them together on three seeds, through the same gate, before using them.
+6. What production still needs: monitoring, drift alarms, threshold recalibration and a retraining schedule.
 
 **Added on 2026-11-25.** Ablations on dev (training-set size, adapter rank, 4-bit training) are in their own section. They do not change the verdict. The gate result above comes from the runs of 2026-11-24.
 
@@ -79,6 +80,7 @@ Built agent-first: I own the scope, decisions and merges; coding agents wrote th
 | Dev set | [data/processed/dev.jsonl](data/processed/dev.jsonl) |
 | Locked test set | [data/processed/test.jsonl](data/processed/test.jsonl), sha256 in [MANIFEST.json](data/processed/MANIFEST.json) |
 | Dataset card | [data/DATASET_CARD.md](data/DATASET_CARD.md) |
+| Model card | [docs/MODEL_CARD.md](docs/MODEL_CARD.md) |
 | Source and licence notices | [data/NOTICE.md](data/NOTICE.md) |
 | Evaluation code | [scorer.py](src/cve2cwe/scorer.py), [gate.py](src/cve2cwe/gate.py), [llm_eval.py](src/cve2cwe/llm_eval.py) |
 | Raw model outputs | [outputs/](outputs/) |
@@ -428,6 +430,7 @@ GPU stages
 
 - One day of work on one task. It is a proof of concept with evidence, not a production system.
 - The ablations are single runs scored on dev only. They show how sensitive the recipe is, not a tuned optimum. Learning rate, target modules and the base model were not varied.
+- No fine-tuned encoder classifier (BERT-class) was tried. The only trained baseline is the linear model.
 - Claude models were run on the test set only, with prompts that were not tuned.
 - Batched serving changes a small share of answers. The gate numbers come from unbatched runs.
 - The GPU sat idle for much of the day while code was written. The spend table shows it.
@@ -436,7 +439,7 @@ GPU stages
 ## What was spent
 
 <!-- BEGIN table:spend -->
-As of 2026-11-25T16:06Z. The second pod is stopped and bills $0.042 per hour for its disk. The first pod was deleted on 2026-11-25 after RunPod migrated its disk. The purpose table is the ledger cut at 2026-11-24T16:31:36Z.
+As of 2026-11-25T18:26Z. The second pod was deleted on 2026-11-25 at about 18:25 UTC. Nothing is billing now. The first pod was deleted on 2026-11-25 after RunPod migrated its disk. The purpose table is the ledger cut at 2026-11-24T16:31:36Z.
 
 GPU H100 SXM 80 GB: 8.360 hours, $37.0. Share of billed hours with no recorded run: 68.2%.
 
@@ -456,13 +459,13 @@ GPU H100 SXM 80 GB: 8.360 hours, $37.0. Share of billed hours with no recorded r
 | Claude Sonnet 5.5, retrieved examples | $11.3 |
 | Claude Sonnet 5.5, zero-shot | $7.24 |
 
-Claude total $19.5. GPU plus Claude: $81.0.
+Claude total $19.5. GPU plus Claude: $81.1.
 
 Provider dashboards, read on 2026-11-24 and 2026-11-25.
 
 RunPod, read 2026-11-24T17:21Z: spent $40.17 (loaded $80.00 minus balance $39.83), next to $40.13 for uptime 9h 5m at $4.418 per hour.
 
-Loaded $80.00. Balance $39.83 at 2026-11-24T17:21Z, $33.08 at 2026-11-25T12:40Z, before the second session, and $18.49 at 2026-11-25T16:06Z, after the second pod was stopped. First pod $46.92, including its time after the ledger was cut and its disk charge while stopped. Second session $14.59. RunPod total $61.51.
+Loaded $80.00. Balance $39.83 at 2026-11-24T17:21Z, $33.08 at 2026-11-25T12:40Z, before the second session, $18.49 at 2026-11-25T16:06Z, after the second pod was stopped, and $18.36 at 2026-11-25T18:26Z, after the second pod was deleted. First pod $46.92, including its time after the ledger was cut and its disk charge while stopped. Second pod $14.72 in total: $14.59 up to 2026-11-25T16:06Z, then $0.13 after it was stopped. RunPod total $61.64.
 
 Second session: pod cve2cwe-migration (llj0kmw2u4ovax), one H100 SXM at $4.418 per hour, 2026-11-25 from about 12:45 UTC to 16:05 UTC. From the run files: training 1.733 hours, merging and dev runs 0.204 hours. The rest of $14.59 is waiting for the disk migration, building the environment, and idle time.
 

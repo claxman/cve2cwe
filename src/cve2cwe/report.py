@@ -1758,6 +1758,13 @@ def _fmt_usd_exact(amount: Decimal) -> str:
     return fmt_usd(float(format(amount, "f")))
 
 
+def _balance_named(balances: list[dict], note: str) -> dict:
+    found = [row for row in balances if str(row.get("note") or "") == note]
+    if len(found) != 1:
+        raise SystemExit(f"report: expected one balance note {note!r}, found {len(found)}")
+    return found[0]
+
+
 def _balance_phrase(reading: dict) -> str:
     text = (
         f"{_fmt_cents(Decimal(str(reading['balance_usd'])))} at {reading['read_utc']}"
@@ -1781,8 +1788,8 @@ def _block_spend(spend: dict) -> str:
     dash = _dashboard()
     runpod = dash["runpod"]
     balances = dash["runpod_balances"]
-    if len(balances) != 3:
-        raise SystemExit("report: expected three RunPod balance readings")
+    if len(balances) < 4:
+        raise SystemExit("report: expected the final RunPod balance reading")
     if Decimal(str(balances[0]["balance_usd"])) != Decimal(str(runpod["balance_usd"])):
         raise SystemExit("report: first balance reading does not match the 17:21 RunPod balance")
     if balances[0]["read_utc"] != runpod["read_utc"]:
@@ -1790,17 +1797,24 @@ def _block_spend(spend: dict) -> str:
     if dash.get("claude_calls_on_2026_11_25") is not False:
         raise SystemExit("report: dashboard_check.json does not record the 25 Nov Claude calls")
     pod = dash["second_pod"]
+    if pod.get("billing_now") is not False:
+        raise SystemExit("report: dashboard does not say that nothing is billing")
+    before = _balance_named(balances, "before the second session")
+    stopped = _balance_named(balances, "after the second pod was stopped")
+    final = _balance_named(balances, "after the second pod was deleted")
     loaded = Decimal(str(runpod["loaded_usd"]))
-    before = Decimal(str(balances[1]["balance_usd"]))
-    final_balance = Decimal(str(balances[2]["balance_usd"]))
-    first_pod = loaded - before
-    second = before - final_balance
+    before_balance = Decimal(str(before["balance_usd"]))
+    stopped_balance = Decimal(str(stopped["balance_usd"]))
+    final_balance = Decimal(str(final["balance_usd"]))
+    first_pod = loaded - before_balance
+    until_stop = before_balance - stopped_balance
+    after_stop = stopped_balance - final_balance
+    second_total = before_balance - final_balance
     runpod_total = loaded - final_balance
     combined = runpod_total + Decimal(str(spend["claude"]["total_usd"]))
-    disk = Decimal(str(pod["disk_usd_per_hour_when_stopped"]))
     opened = (
-        f"As of {balances[2]['read_utc']}. The second pod is stopped and bills "
-        f"{_fmt_rate(disk)} per hour for its disk. The first pod was deleted on "
+        f"As of {final['read_utc']}. The second pod was deleted on {pod['deleted_on']} "
+        f"at {pod['deleted_about']}. Nothing is billing now. The first pod was deleted on "
         f"{pod['first_pod_deleted_on']} after RunPod migrated its disk. "
         f"The purpose table is the ledger cut at {spend['written_utc']}."
     )
@@ -1814,18 +1828,20 @@ def _block_spend(spend: dict) -> str:
         f"GPU plus Claude: {_fmt_usd_exact(combined)}."
     )
     train_hours, other_hours = _second_session_hours()
+    listed = ", ".join(_balance_phrase(row) for row in balances[:-1])
+    listed = f"{listed}, and {_balance_phrase(balances[-1])}"
     balance_line = (
-        f"Loaded {_fmt_cents(loaded)}. Balance {_balance_phrase(balances[0])}, "
-        f"{_balance_phrase(balances[1])}, and {_balance_phrase(balances[2])}. "
+        f"Loaded {_fmt_cents(loaded)}. Balance {listed}. "
         f"First pod {_fmt_cents(first_pod)}, including its time after the ledger was cut "
-        f"and its disk charge while stopped. Second session {_fmt_cents(second)}. "
-        f"RunPod total {_fmt_cents(runpod_total)}."
+        f"and its disk charge while stopped. Second pod {_fmt_cents(second_total)} in total: "
+        f"{_fmt_cents(until_stop)} up to {stopped['read_utc']}, then {_fmt_cents(after_stop)} "
+        f"after it was stopped. RunPod total {_fmt_cents(runpod_total)}."
     )
     session = (
         f"Second session: pod {pod['name']} ({pod['id']}), one {pod['gpu']} at "
         f"{_fmt_rate(Decimal(str(pod['rate_usd_per_hour'])))} per hour, {pod['window']}. "
         f"From the run files: training {train_hours:.3f} hours, merging and dev runs "
-        f"{other_hours:.3f} hours. The rest of {_fmt_cents(second)} is waiting for the disk "
+        f"{other_hours:.3f} hours. The rest of {_fmt_cents(until_stop)} is waiting for the disk "
         "migration, building the environment, and idle time."
     )
     no_calls = "No Claude API calls on 2026-11-25."

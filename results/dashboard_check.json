@@ -22,6 +22,11 @@
       "read_utc": "2026-11-25T16:06Z",
       "balance_usd": 18.49,
       "note": "after the second pod was stopped"
+    },
+    {
+      "read_utc": "2026-11-25T18:26Z",
+      "balance_usd": 18.36,
+      "note": "after the second pod was deleted"
     }
   ],
   "second_pod": {
@@ -31,7 +36,10 @@
     "rate_usd_per_hour": 4.418,
     "window": "2026-11-25 from about 12:45 UTC to 16:05 UTC",
     "disk_usd_per_hour_when_stopped": 0.042,
-    "first_pod_deleted_on": "2026-11-25"
+    "first_pod_deleted_on": "2026-11-25",
+    "deleted_on": "2026-11-25",
+    "deleted_about": "about 18:25 UTC",
+    "billing_now": false
   },
   "claude_calls_on_2026_11_25": false,
   "anthropic_console": {
