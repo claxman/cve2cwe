@@ -17,8 +17,9 @@
 #   --max-num-seqs N            override configs/serve.yaml max_num_seqs
 #
 # Env vars:
-#   VLLM_LOG   path for stdout/stderr (default /workspace/logs/vllm.log)
-#   HF_HOME    hugging face cache (default /workspace/hf_cache)
+#   POD_ROOT   venv, logs and HF cache root (default /workspace)
+#   VLLM_LOG   path for stdout/stderr (default $POD_ROOT/logs/vllm.log)
+#   HF_HOME    hugging face cache (default $POD_ROOT/hf_cache)
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
@@ -75,9 +76,11 @@ if [ ! -d "$MODEL" ] && [[ "$MODEL" != *"/"*"/"* ]] && [[ "$MODEL" != */* ]]; th
     exit 2
 fi
 
-export HF_HOME="${HF_HOME:-/workspace/hf_cache}"
-VENV="${VLLM_VENV:-/workspace/.venv-serve}"
-LOG="${VLLM_LOG:-/workspace/logs/vllm.log}"
+POD_ROOT="${POD_ROOT:-/workspace}"
+POD_ROOT="${POD_ROOT%/}"
+export HF_HOME="${HF_HOME:-$POD_ROOT/hf_cache}"
+VENV="${VLLM_VENV:-$POD_ROOT/.venv-serve}"
+LOG="${VLLM_LOG:-$POD_ROOT/logs/vllm.log}"
 mkdir -p "$(dirname "$LOG")"
 
 # shellcheck disable=SC1091

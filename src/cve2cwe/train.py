@@ -50,7 +50,7 @@ from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import train_on_responses_only
 
-from cve2cwe.ablations import load_train_config, sample_train_fraction
+from cve2cwe.ablations import load_train_config, record_final_dev_loss, sample_train_fraction
 from cve2cwe.prompts import (
     load_prompts_cfg,
     load_systems_cfg,
@@ -215,20 +215,70 @@ def _load_data() -> tuple[list[dict], list[dict]]:
 # Model build.
 
 
+def _config_model_name(model) -> str:
+    config = getattr(model, "config", None)
+    for attr in ("name_or_path", "_name_or_path"):
+        value = getattr(config, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 def _load_base(train_cfg: dict, max_seq_length: int):
+    """Load the pinned base. 4-bit must quantise that repo, not a swapped one.
+
+    Unsloth 2026.11.10 remaps a 4-bit request onto a pre-quantised repo unless
+    use_exact_model_name is set. The 16-bit call does not pass that flag.
+    """
+    load_4bit = bool(train_cfg["load_in_4bit"])
+    wanted = train_cfg["base_model"]
     print(
-        f"[train] loading base {train_cfg['base_model']} @ {train_cfg['revision']} "
-        f"(max_seq_length={max_seq_length})"
+        f"[train] loading base {wanted} @ {train_cfg['revision']} "
+        f"(max_seq_length={max_seq_length}, load_in_4bit={load_4bit})"
     )
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=train_cfg["base_model"],
-        revision=train_cfg["revision"],
-        max_seq_length=max_seq_length,
-        load_in_4bit=bool(train_cfg["load_in_4bit"]),
-        load_in_16bit=bool(train_cfg["load_in_16bit"]),
-        full_finetuning=False,
-    )
-    return model, tokenizer
+    kwargs = {
+        "model_name": wanted,
+        "revision": train_cfg["revision"],
+        "max_seq_length": max_seq_length,
+        "load_in_4bit": load_4bit,
+        "load_in_16bit": bool(train_cfg["load_in_16bit"]),
+        "full_finetuning": False,
+    }
+    resolved: dict[str, str] = {}
+    if load_4bit:
+        # Unsloth 2026.11.10 accepts both. A build without use_exact_model_name
+        # cannot stop the pre-quantised repo swap, so that run is skipped.
+        kwargs["use_exact_model_name"] = True
+
+        def _refuse_swap(name: str) -> None:
+            resolved["name"] = name
+            if name != wanted:
+                raise SystemExit(
+                    f"train: 4-bit load resolved {name}, not {wanted}. Skipping this run."
+                )
+
+        kwargs["on_model_resolved"] = _refuse_swap
+    try:
+        model, tokenizer = FastLanguageModel.from_pretrained(**kwargs)
+    except TypeError as exc:
+        text = str(exc)
+        if load_4bit and "use_exact_model_name" in text:
+            raise SystemExit(
+                "train: this Unsloth cannot keep the pinned model name when "
+                "load_in_4bit is true (no use_exact_model_name). Skipping this run."
+            ) from exc
+        if load_4bit and "on_model_resolved" in text:
+            kwargs.pop("on_model_resolved", None)
+            model, tokenizer = FastLanguageModel.from_pretrained(**kwargs)
+        else:
+            raise
+    loaded = resolved.get("name") or _config_model_name(model)
+    if load_4bit and loaded != wanted:
+        raise SystemExit(
+            f"train: 4-bit load resolved {loaded or '(unknown)'}, not {wanted}. "
+            "Skipping this run."
+        )
+    return model, tokenizer, loaded or wanted
 
 
 def _attach_lora(model, train_cfg: dict, seed: int, max_seq_length: int):
@@ -481,7 +531,7 @@ def mode_profile_lengths() -> int:
     systems = load_systems_cfg()
     train_rows, dev_rows = _load_data()
     max_sl = int(train_cfg.get("max_seq_length", 1024))
-    _, tokenizer = _load_base(train_cfg, max_seq_length=max_sl)
+    _, tokenizer, _loaded = _load_base(train_cfg, max_seq_length=max_sl)
     print(f"[profile] train rows: {len(train_rows)}, dev rows: {len(dev_rows)}")
     train_texts = _render_split(tokenizer, train_rows, prompts, systems, with_label=True)
     dev_texts = _render_split(tokenizer, dev_rows, prompts, systems, with_label=True)
@@ -509,7 +559,7 @@ def mode_memory_check(n_examples: int) -> int:
     systems = load_systems_cfg()
     train_rows, _ = _load_data()
     max_sl = int(train_cfg["max_seq_length"])
-    model, tokenizer = _load_base(train_cfg, max_seq_length=max_sl)
+    model, tokenizer, _loaded = _load_base(train_cfg, max_seq_length=max_sl)
     model = _attach_lora(model, train_cfg, seed=1, max_seq_length=max_sl)
 
     # Pick the longest N rendered examples.
@@ -565,7 +615,7 @@ def mode_probe() -> int:
     picked = [train_rows[i] for i in idx[: int(probe_cfg["train_rows"])]]
 
     max_sl = int(train_cfg["max_seq_length"])
-    model, tokenizer = _load_base(train_cfg, max_seq_length=max_sl)
+    model, tokenizer, _loaded = _load_base(train_cfg, max_seq_length=max_sl)
     model = _attach_lora(model, train_cfg, seed=seed, max_seq_length=max_sl)
     _check_lengths_or_fail(tokenizer, picked, [], prompts, systems, max_sl)
     ds = _build_dataset(tokenizer, picked, prompts, systems)
@@ -703,8 +753,11 @@ def mode_seed(seed: int, override: Path | None = None) -> int:
         )
     max_sl = int(train_cfg["max_seq_length"])
 
-    model, tokenizer = _load_base(train_cfg, max_seq_length=max_sl)
+    model, tokenizer, loaded_name = _load_base(train_cfg, max_seq_length=max_sl)
     model = _attach_lora(model, train_cfg, seed=seed, max_seq_length=max_sl)
+    initial["loaded_model_name"] = loaded_name
+    run_json_path.write_text(json.dumps(initial, indent=2) + "\n")
+    print(f"[train] loaded model name: {loaded_name}")
 
     # Prefix assertion on one sample.
     _render_and_assert_prefix(tokenizer, train_rows[0], prompts, systems)
@@ -788,6 +841,11 @@ def mode_seed(seed: int, override: Path | None = None) -> int:
     trainer.train()
     train_seconds = time.time() - t_train
     peak_gpu_bytes = torch.cuda.max_memory_allocated()
+    # Short runs never hit eval_steps, so the last step has no dev loss yet.
+    final_step = int(trainer.state.global_step)
+    if not any(int(row["step"]) == final_step for row in dev_probe.losses):
+        metrics = trainer.evaluate()
+        record_final_dev_loss(dev_probe.losses, final_step, float(metrics["eval_loss"]))
 
     # Tokens seen (upper-bound estimate: mean input tokens × eff batch × step count).
     eff_batch = int(train_cfg["batch"]["per_device_train_batch_size"]) * int(

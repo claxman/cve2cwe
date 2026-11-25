@@ -6,6 +6,7 @@ from cve2cwe.ablations import (
     apply_override,
     load_override,
     load_train_config,
+    record_final_dev_loss,
     sample_train_fraction,
 )
 from cve2cwe.prompts import REPO_ROOT
@@ -29,8 +30,10 @@ def test_same_seed_same_rows_and_tenth_is_rounded():
 
 def test_override_files_only_change_the_named_knob():
     base, _ = load_train_config(None)
+    assert ABLATION_NAMES[0] == "ctrl"
     assert [ablation_path(name).stem for name in ABLATION_NAMES] == list(ABLATION_NAMES)
     expected = {
+        "ctrl": {"run_tag"},
         "frac05": {"run_tag", "train_fraction", "fraction_seed"},
         "frac10": {"run_tag", "train_fraction", "fraction_seed"},
         "frac30": {"run_tag", "train_fraction", "fraction_seed"},
@@ -58,3 +61,12 @@ def test_override_files_only_change_the_named_knob():
         assert merged["lora"]["r"] == {"r4": 4, "r64": 64}.get(name, 16)
         assert merged["load_in_4bit"] is (name == "qlora4bit")
         assert path.is_relative_to(REPO_ROOT)
+
+
+def test_final_dev_loss_is_appended_once():
+    losses: list[dict] = []
+    record_final_dev_loss(losses, 134, 0.25)
+    record_final_dev_loss(losses, 134, 0.9)
+    assert losses == [{"step": 134, "loss": 0.25}]
+    record_final_dev_loss(losses, 200, 0.2)
+    assert losses[-1] == {"step": 200, "loss": 0.2}

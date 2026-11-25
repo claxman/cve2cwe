@@ -5,6 +5,11 @@
 # seed 1 inside one detached tmux session. Stops on the first failure.
 set -euo pipefail
 
+# POD_ROOT replaces the old /workspace locations. .pod sets it; the default
+# keeps the original pod layout.
+POD_ROOT="${POD_ROOT:-/workspace}"
+POD_ROOT="${POD_ROOT%/}"
+
 HASH="${1:?usage: pod_train_ablations.sh <short-git-hash> <ablation> [ablation...]}"
 shift
 if [ "$#" -lt 1 ]; then
@@ -12,9 +17,9 @@ if [ "$#" -lt 1 ]; then
     exit 2
 fi
 
-LIVE=/workspace/cve2cwe
-FROZEN=/workspace/run-$HASH
-LOG_DIR=/workspace/logs
+LIVE=$POD_ROOT/cve2cwe
+FROZEN=$POD_ROOT/run-$HASH
+LOG_DIR=$POD_ROOT/logs
 SESSION="cve2cwe-ablate-$HASH"
 
 # Refuse to start while any other cve2cwe-* tmux session exists, because
@@ -73,7 +78,7 @@ for NAME in "$@"; do
 done
 
 # shellcheck disable=SC1091
-source /workspace/.venv-train/bin/activate
+source "$POD_ROOT/.venv-train/bin/activate"
 cd "$FROZEN"
 uv pip install -e . --no-deps -q
 
@@ -82,11 +87,11 @@ RUNNER=$LOG_DIR/run_ablations_${HASH}.sh
     echo "#!/usr/bin/env bash"
     echo "set -o pipefail"
     echo "cd $FROZEN"
-    echo "source /workspace/.venv-train/bin/activate"
-    echo "export HF_HOME=/workspace/hf_cache"
+    echo "source \"$POD_ROOT/.venv-train/bin/activate\""
+    echo "export HF_HOME=$POD_ROOT/hf_cache"
     echo "export WANDB_PROJECT=cve2cwe"
-    echo "export CVE2CWE_OUTPUT_DIR=/workspace/cve2cwe/outputs"
-    echo "export CVE2CWE_CHECKPOINTS=/workspace/checkpoints"
+    echo "export CVE2CWE_OUTPUT_DIR=$LIVE/outputs"
+    echo "export CVE2CWE_CHECKPOINTS=$POD_ROOT/checkpoints"
     echo "if [ -f $LIVE/.env ]; then"
     echo "    set -a"
     echo "    . $LIVE/.env"

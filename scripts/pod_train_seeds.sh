@@ -6,10 +6,15 @@
 # detached tmux session. Stops on the first failure.
 set -euo pipefail
 
+# POD_ROOT replaces the old /workspace locations. .pod sets it; the default
+# keeps the original pod layout.
+POD_ROOT="${POD_ROOT:-/workspace}"
+POD_ROOT="${POD_ROOT%/}"
+
 HASH="${1:?usage: pod_train_seeds.sh <short-git-hash>}"
-LIVE=/workspace/cve2cwe
-FROZEN=/workspace/run-$HASH
-LOG_DIR=/workspace/logs
+LIVE=$POD_ROOT/cve2cwe
+FROZEN=$POD_ROOT/run-$HASH
+LOG_DIR=$POD_ROOT/logs
 SESSION="cve2cwe-$HASH"
 
 # Refuse to start while any other cve2cwe-* tmux session exists, because
@@ -76,7 +81,7 @@ RUNNER=$LOG_DIR/run_seeds_${NAME_PREFIX}${HASH}.sh
 # frozen tree, not the live one. This is the single pip/uv call the user
 # allows while a train loop is live.
 # shellcheck disable=SC1091
-source /workspace/.venv-train/bin/activate
+source "$POD_ROOT/.venv-train/bin/activate"
 cd "$FROZEN"
 uv pip install -e . --no-deps -q
 
@@ -86,13 +91,13 @@ cat >"$RUNNER" <<SCRIPT
 #!/usr/bin/env bash
 set -o pipefail
 cd $FROZEN
-source /workspace/.venv-train/bin/activate
-export HF_HOME=/workspace/hf_cache
+source "$POD_ROOT/.venv-train/bin/activate"
+export HF_HOME=$POD_ROOT/hf_cache
 export WANDB_PROJECT=cve2cwe
-# Outputs go to the live repo dir so scripts/pod.sh pull (which syncs
-# /workspace/cve2cwe/outputs/) can round-trip them to the Mac.
-export CVE2CWE_OUTPUT_DIR=/workspace/cve2cwe/outputs
-export CVE2CWE_CHECKPOINTS=/workspace/checkpoints
+# Outputs go to the live repo dir so scripts/pod.sh pull can round-trip
+# them to the Mac.
+export CVE2CWE_OUTPUT_DIR=$LIVE/outputs
+export CVE2CWE_CHECKPOINTS=$POD_ROOT/checkpoints
 if [ -f $LIVE/.env ]; then
     set -a
     . $LIVE/.env

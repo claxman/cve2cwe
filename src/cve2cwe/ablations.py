@@ -17,8 +17,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ABLATION_DIR = REPO_ROOT / "configs" / "ablations"
 
-# Order is the README table order.
+# Order is the README table order. ctrl is the same-machine reference.
 ABLATION_NAMES = (
+    "ctrl",
     "frac05",
     "frac10",
     "frac30",
@@ -39,6 +40,18 @@ _OVERRIDE_KEYS = {
     "lora",
     "what_changed",
 }
+def record_final_dev_loss(losses: list[dict], step: int, loss: float) -> None:
+    """Append the dev loss at the final step unless that step is already stored.
+
+    A short run can finish before the first eval_steps checkpoint, which
+    leaves dev_losses empty. The extra evaluation fills that gap.
+    """
+    step = int(step)
+    if any(int(row["step"]) == step for row in losses):
+        return
+    losses.append({"step": step, "loss": float(loss)})
+
+
 def sample_train_fraction(rows: list, fraction: float, seed: int) -> list:
     """Seeded subset. The count is round(fraction x rows). Same seed, same rows.
 

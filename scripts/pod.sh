@@ -18,6 +18,10 @@ fi
 : "${SSH_USER:?SSH_USER not set in .pod}"
 : "${SSH_KEY:?SSH_KEY not set in .pod}"
 : "${REPO_REMOTE:?REPO_REMOTE not set in .pod}"
+# Live repo, frozen trees, venvs, HF cache, logs and adapters live here.
+# .pod sets it. The default is the original pod disk.
+: "${POD_ROOT:=/workspace}"
+POD_ROOT="${POD_ROOT%/}"
 
 # Expand ~ in SSH_KEY.
 SSH_KEY_EXPANDED="${SSH_KEY/#\~/$HOME}"
@@ -99,7 +103,7 @@ case "$cmd" in
         fi
         HASH=$(git -C "$ROOT" rev-parse --short HEAD)
         echo "pod.sh: launching training for commit $HASH"
-        "${SSH_CMD[@]}" "bash /workspace/cve2cwe/scripts/pod_train_seeds.sh '$HASH'"
+        "${SSH_CMD[@]}" "POD_ROOT='$POD_ROOT' bash '$REPO_REMOTE/scripts/pod_train_seeds.sh' '$HASH'"
         ;;
     train-ablations)
         if [ "$#" -eq 0 ]; then
@@ -123,7 +127,7 @@ case "$cmd" in
         done
         echo "pod.sh: launching ablations for commit $HASH:$remote_names"
         # shellcheck disable=SC2086
-        "${SSH_CMD[@]}" "bash /workspace/cve2cwe/scripts/pod_train_ablations.sh '$HASH'$remote_names"
+        "${SSH_CMD[@]}" "POD_ROOT='$POD_ROOT' bash '$REPO_REMOTE/scripts/pod_train_ablations.sh' '$HASH'$remote_names"
         ;;
     -h|--help|help|"")
         usage
