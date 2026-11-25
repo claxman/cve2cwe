@@ -2214,7 +2214,9 @@ def _block_facts_learning_curve(points: list[dict]) -> str:
 
 
 def _plot_learning_curve(points: list[dict]) -> None:
-    """Draw results/curves/learning_curve.png in the same plain style as loss.png."""
+    """Draw results/curves/learning_curve.png. The y axis is percent, as in the README."""
+    import math
+
     import matplotlib
 
     matplotlib.use("Agg")
@@ -2224,15 +2226,52 @@ def _plot_learning_curve(points: list[dict]) -> None:
     zero = float(_one_result("qwen35_4b_zero_shot", "dev")["metrics"]["accuracy"])
     fig, ax = plt.subplots(figsize=(10, 4))
     xs = [point["rows"] for point in points]
-    ax.plot(xs, [point["ft_acc"] for point in points], marker="o", label="Fine-tuned")
-    ax.plot(
-        xs,
-        [point["tfidf_acc"] for point in points],
-        marker="o",
-        label="TF-IDF + linear SVM",
+    ft = [100.0 * point["ft_acc"] for point in points]
+    tfidf = [100.0 * point["tfidf_acc"] for point in points]
+    ax.plot(xs, ft, marker="o", label="Fine-tuned")
+    ax.plot(xs, tfidf, marker="o", label="TF-IDF + linear SVM")
+    # Same grey, different dashes, so neither line is the fine-tuned blue.
+    grey = "0.45"
+    ax.axhline(
+        100.0 * retrieval,
+        color=grey,
+        linestyle="--",
+        linewidth=1,
+        label="Base model with retrieved examples",
     )
-    ax.axhline(retrieval, linestyle="--", linewidth=1, label="Retrieved examples")
-    ax.axhline(zero, linestyle="--", linewidth=1, label="Zero-shot")
+    ax.axhline(
+        100.0 * zero,
+        color=grey,
+        linestyle=":",
+        linewidth=1,
+        label="Base model zero-shot",
+    )
+    for x, point in zip(xs, points, strict=True):
+        ax.annotate(
+            fmt_pct(point["ft_acc"]),
+            (x, 100.0 * point["ft_acc"]),
+            textcoords="offset points",
+            xytext=(0, 6),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+        ax.annotate(
+            fmt_pct(point["tfidf_acc"]),
+            (x, 100.0 * point["tfidf_acc"]),
+            textcoords="offset points",
+            xytext=(0, -6),
+            ha="center",
+            va="top",
+            fontsize=8,
+        )
+    bottom = min(100.0 * zero, 100.0 * retrieval, min(ft), min(tfidf))
+    top = max(max(ft), max(tfidf))
+    ax.set_ylim(bottom - 5, top + 5)
+    first = math.ceil(bottom / 10.0) * 10
+    last = math.ceil(top / 10.0) * 10
+    ax.set_yticks(list(range(first, last + 1, 10)))
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _pos: f"{int(value)}%"))
     ax.set_xscale("log")
     ax.xaxis.set_major_locator(plt.FixedLocator(xs))
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda value, _pos: f"{int(round(value)):,}"))

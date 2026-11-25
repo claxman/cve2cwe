@@ -155,7 +155,7 @@ Champion: the system other than the candidate with the highest accuracy on the l
 
 ## Ablations
 
-Eight one-seed runs, added after submission. Each changes one thing against the shipped recipe and is scored on dev only. The test set, the gate and the shipped model are unchanged. Differences under about one point are noise.
+Eight one-seed runs, added after submission. Each changes one thing against the shipped recipe and is scored on dev only. The test set, the gate and the shipped model are unchanged. A difference of half a point between two single runs is treated as noise.
 
 - ctrl: nothing. The shipped recipe, rerun in a rebuilt environment.
 - frac05: 5% of the train rows, 2 epochs.
