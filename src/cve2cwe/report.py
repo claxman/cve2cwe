@@ -1724,6 +1724,50 @@ def _console_sums(spend: dict) -> dict[str, float]:
     return buckets
 
 
+def _hours_between(start: str, end: str) -> float:
+    left = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    right = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    return (right - left).total_seconds() / 3600.0
+
+
+def _second_session_hours() -> tuple[float, float]:
+    """Training hours, then merge plus dev-run hours, from the 25 Nov ablation files."""
+    train_hours = 0.0
+    other_hours = 0.0
+    for name in ABLATION_NAMES:
+        run = _train_run(name)
+        if not str(run["started_utc"]).startswith("2026-11-25"):
+            raise SystemExit(f"report: {name} training run is not from 2026-11-25")
+        train_hours += float(run["wall_seconds"]) / 3600.0
+        merge_path = REPO_ROOT / "outputs" / "merge" / f"ablation_{name}" / "run.json"
+        if not merge_path.is_file():
+            raise SystemExit(f"report: missing merge run {merge_path}")
+        merged = json.loads(merge_path.read_text())
+        if not str(merged["started_utc"]).startswith("2026-11-25"):
+            raise SystemExit(f"report: {name} merge is not from 2026-11-25")
+        other_hours += _hours_between(merged["started_utc"], merged["finished_utc"])
+        scored = _prediction_run(f"ablation_{name}")
+        if not str(scored["started_utc"]).startswith("2026-11-25"):
+            raise SystemExit(f"report: ablation_{name} dev run is not from 2026-11-25")
+        other_hours += float(scored["wall_seconds"]) / 3600.0
+    return train_hours, other_hours
+
+
+def _fmt_usd_exact(amount: Decimal) -> str:
+    """fmt_usd of a Decimal, without binary float noise."""
+    return fmt_usd(float(format(amount, "f")))
+
+
+def _balance_phrase(reading: dict) -> str:
+    text = (
+        f"{_fmt_cents(Decimal(str(reading['balance_usd'])))} at {reading['read_utc']}"
+    )
+    note = str(reading.get("note") or "").strip()
+    if note:
+        text += f", {note}"
+    return text
+
+
 def _block_spend(spend: dict) -> str:
     gpu = spend["gpu"]
     idle = float(gpu["billed_minus_recorded_hours"]) / float(gpu["hours_so_far"])
@@ -1734,8 +1778,32 @@ def _block_spend(spend: dict) -> str:
     claude_rows = []
     for run in spend["claude"]["runs"]:
         claude_rows.append([_display(run["system"]), fmt_usd(run["cost_usd"])])
-    total = float(gpu["total_usd"]) + float(spend["claude"]["total_usd"])
-    opened = f"As of {spend['written_utc']}. The pod was still running."
+    dash = _dashboard()
+    runpod = dash["runpod"]
+    balances = dash["runpod_balances"]
+    if len(balances) != 3:
+        raise SystemExit("report: expected three RunPod balance readings")
+    if Decimal(str(balances[0]["balance_usd"])) != Decimal(str(runpod["balance_usd"])):
+        raise SystemExit("report: first balance reading does not match the 17:21 RunPod balance")
+    if balances[0]["read_utc"] != runpod["read_utc"]:
+        raise SystemExit("report: first balance reading time does not match the RunPod reading")
+    if dash.get("claude_calls_on_2026_11_25") is not False:
+        raise SystemExit("report: dashboard_check.json does not record the 25 Nov Claude calls")
+    pod = dash["second_pod"]
+    loaded = Decimal(str(runpod["loaded_usd"]))
+    before = Decimal(str(balances[1]["balance_usd"]))
+    final_balance = Decimal(str(balances[2]["balance_usd"]))
+    first_pod = loaded - before
+    second = before - final_balance
+    runpod_total = loaded - final_balance
+    combined = runpod_total + Decimal(str(spend["claude"]["total_usd"]))
+    disk = Decimal(str(pod["disk_usd_per_hour_when_stopped"]))
+    opened = (
+        f"As of {balances[2]['read_utc']}. The second pod is stopped and bills "
+        f"{_fmt_rate(disk)} per hour for its disk. The first pod was deleted on "
+        f"{pod['first_pod_deleted_on']} after RunPod migrated its disk. "
+        f"The purpose table is the ledger cut at {spend['written_utc']}."
+    )
     lead = (
         f"GPU {gpu['gpu']}: {float(gpu['hours_so_far']):.3f} hours, "
         f"{fmt_usd(gpu['total_usd'])}. "
@@ -1743,11 +1811,24 @@ def _block_spend(spend: dict) -> str:
     )
     tail = (
         f"Claude total {fmt_usd(spend['claude']['total_usd'])}. "
-        f"GPU plus Claude: {fmt_usd(total)}."
+        f"GPU plus Claude: {_fmt_usd_exact(combined)}."
     )
-    dash = _dashboard()
-    runpod = dash["runpod"]
-    loaded = Decimal(str(runpod["loaded_usd"]))
+    train_hours, other_hours = _second_session_hours()
+    balance_line = (
+        f"Loaded {_fmt_cents(loaded)}. Balance {_balance_phrase(balances[0])}, "
+        f"{_balance_phrase(balances[1])}, and {_balance_phrase(balances[2])}. "
+        f"First pod {_fmt_cents(first_pod)}, including its time after the ledger was cut "
+        f"and its disk charge while stopped. Second session {_fmt_cents(second)}. "
+        f"RunPod total {_fmt_cents(runpod_total)}."
+    )
+    session = (
+        f"Second session: pod {pod['name']} ({pod['id']}), one {pod['gpu']} at "
+        f"{_fmt_rate(Decimal(str(pod['rate_usd_per_hour'])))} per hour, {pod['window']}. "
+        f"From the run files: training {train_hours:.3f} hours, merging and dev runs "
+        f"{other_hours:.3f} hours. The rest of {_fmt_cents(second)} is waiting for the disk "
+        "migration, building the environment, and idle time."
+    )
+    no_calls = "No Claude API calls on 2026-11-25."
     balance = Decimal(str(runpod["balance_usd"]))
     rate = Decimal(str(runpod["spend_rate_usd_per_hour"]))
     uptime = runpod["pod_uptime"]
@@ -1788,6 +1869,9 @@ def _block_spend(spend: dict) -> str:
             tail,
             source,
             runpod_line,
+            balance_line,
+            session,
+            no_calls,
             console_line,
             difference,
             scope,
@@ -1913,12 +1997,270 @@ def _block_ablations() -> str:
     return _md(headers, rows)
 
 
+# Half a point on one seed. The findings treat a smaller gap as noise.
+_HALF_POINT = 0.005
+
+_CURVE = (
+    ("5%", "frac05", "ablation_frac05", "ablation_tfidf_frac05"),
+    ("10%", "frac10", "ablation_frac10", "ablation_tfidf_frac10"),
+    ("30%", "frac30", "ablation_frac30", "ablation_tfidf_frac30"),
+    ("100%", "ctrl", "ablation_ctrl", "tfidf_svm"),
+)
+
+
+def _points_mag(delta: float) -> str:
+    """One decimal, no sign. The sentence around it says which way the gap points."""
+    return f"{abs(100.0 * delta):.1f}"
+
+
+def _fmt_c(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    if "." not in text:
+        text += ".0"
+    return text
+
+
+def _train_run(name: str) -> dict:
+    path = REPO_ROOT / "outputs" / "train" / f"{name}-seed1" / "run.json"
+    if not path.is_file():
+        raise SystemExit(f"report: missing training run {path}")
+    return json.loads(path.read_text())
+
+
+def _prediction_run(system: str, split: str = "dev") -> dict:
+    doc = _one_result(system, split)
+    path = REPO_ROOT / doc["prediction_dir"] / "run.json"
+    return json.loads(path.read_text())
+
+
+def _chosen_c(run: dict) -> float:
+    if "chosen_c" in run:
+        return float(run["chosen_c"])
+    return float(run["config"]["best_c"])
+
+
+def _assert_curve(points: list[dict]) -> None:
+    gaps = [point["ft_acc"] - point["tfidf_acc"] for point in points]
+    if any(gap <= 0 for gap in gaps):
+        detail = ", ".join(
+            f"{point['label']} {gap:+.4f}" for point, gap in zip(points, gaps, strict=True)
+        )
+        raise SystemExit(f"report: fine-tuned accuracy is not above TF-IDF at every size: {detail}")
+    if gaps[0] <= gaps[-1]:
+        raise SystemExit(
+            f"report: the 5% gap {gaps[0]:+.4f} is not above the 100% gap {gaps[-1]:+.4f}"
+        )
+    gain = points[-1]["ft_acc"] - points[-2]["ft_acc"]
+    if gain < 0 or gain > _HALF_POINT:
+        raise SystemExit(
+            f"report: gain from 30% to 100% is {gain:+.4f}, outside 0 to half a point"
+        )
+
+
+def _learning_points() -> list[dict]:
+    points = []
+    for label, train_name, ft_system, tfidf_system in _CURVE:
+        train = _train_run(train_name)
+        rows = int(train["train_row_count"])
+        ft = _one_result(ft_system, "dev")
+        tfidf = _one_result(tfidf_system, "dev")
+        tfidf_run = _prediction_run(tfidf_system)
+        if tfidf_run.get("git_dirty"):
+            raise SystemExit(f"report: {tfidf_system} run is dirty")
+        counted = tfidf_run.get("train_row_count")
+        if counted is not None and int(counted) != rows:
+            raise SystemExit(
+                f"report: {tfidf_system} has {counted} rows and {train_name} has {rows}"
+            )
+        points.append(
+            {
+                "label": label,
+                "rows": rows,
+                "ft_acc": float(ft["metrics"]["accuracy"]),
+                "ft_ci": ft["metrics"]["accuracy_ci95"],
+                "tfidf_acc": float(tfidf["metrics"]["accuracy"]),
+                "tfidf_ci": tfidf["metrics"]["accuracy_ci95"],
+                "chosen_c": _chosen_c(tfidf_run),
+                "diff": _paired_against(ft_system, tfidf_system),
+            }
+        )
+    _assert_curve(points)
+    return points
+
+
+def _block_facts_ablations() -> str:
+    """Findings under the ablation table. Refuses a sentence the numbers do not support."""
+    ctrl = float(_one_result("ablation_ctrl", "dev")["metrics"]["accuracy"])
+    shipped = float(_one_result("candidate_e2-seed1", "dev")["metrics"]["accuracy"])
+    seeds = [
+        float(_one_result(f"candidate_e2-seed{i}", "dev")["metrics"]["accuracy"])
+        for i in (1, 2, 3)
+    ]
+    r4 = float(_one_result("ablation_r4", "dev")["metrics"]["accuracy"])
+    r64 = float(_one_result("ablation_r64", "dev")["metrics"]["accuracy"])
+    qlora = float(_one_result("ablation_qlora4bit", "dev")["metrics"]["accuracy"])
+    e6_acc = float(_one_result("ablation_frac10-e6", "dev")["metrics"]["accuracy"])
+    f10_acc = float(_one_result("ablation_frac10", "dev")["metrics"]["accuracy"])
+    f30_acc = float(_one_result("ablation_frac30", "dev")["metrics"]["accuracy"])
+    e6_run = _train_run("frac10-e6")
+    f10_run = _train_run("frac10")
+    f30_run = _train_run("frac30")
+    e6_dev = float(e6_run["dev_losses"][-1]["loss"])
+    f10_dev = float(f10_run["dev_losses"][-1]["loss"])
+    if abs(r4 - ctrl) > _HALF_POINT or abs(r64 - ctrl) > _HALF_POINT:
+        raise SystemExit(
+            "report: rank is outside half a point of the control "
+            f"(r4 {r4:.4f}, r64 {r64:.4f}, ctrl {ctrl:.4f})"
+        )
+    if not r4 < ctrl:
+        raise SystemExit(f"report: rank 4 ({r4:.4f}) is not below the control ({ctrl:.4f})")
+    if qlora < ctrl - _HALF_POINT:
+        raise SystemExit(
+            f"report: 4-bit accuracy {qlora:.4f} is more than half a point below {ctrl:.4f}"
+        )
+    if not (e6_acc < f10_acc and e6_dev > f10_dev):
+        raise SystemExit(
+            "report: the 6-epoch run is not below the 2-epoch run with a higher dev loss "
+            f"(acc {e6_acc:.4f} vs {f10_acc:.4f}, dev loss {e6_dev:.6f} vs {f10_dev:.6f})"
+        )
+    q_cells = _train_metric_cells(_train_run("qlora4bit"))
+    ctrl_cells = _train_metric_cells(_train_run("ctrl"))
+    bullets = [
+        (
+            "- **Noise first.** The control repeats the shipped recipe and seed on a different "
+            f"machine and scores {fmt_pct(ctrl)}, against {fmt_pct(shipped)} for the shipped run. "
+            f"The three shipped seeds span {fmt_pct(min(seeds))} to {fmt_pct(max(seeds))}. "
+            "A difference of half a point between two single runs is not a finding."
+        ),
+        (
+            f"- **Adapter rank makes little difference.** Rank 4, 16 and 64 score {fmt_pct(r4)}, "
+            f"{fmt_pct(ctrl)} and {fmt_pct(r64)}. Rank 4 trains a quarter of the parameters of "
+            f"rank 16 and is {_points_mag(ctrl - r4)} points below it, inside the noise. "
+            "Rank 64 buys nothing."
+        ),
+        (
+            "- **4-bit training lost nothing on this task.** The adapter was trained on 4-bit "
+            "weights and then merged into the full-precision weights, which is how it would be "
+            f"served. It scores {fmt_pct(qlora)}. Peak training memory was {q_cells[3]} GiB "
+            f"against {ctrl_cells[3]} GiB, and training took {q_cells[2]} minutes against "
+            f"{ctrl_cells[2]}. The Unsloth guide advises against 4-bit training for this model "
+            "family. On this task and one seed, that caution did not show up."
+        ),
+        (
+            "- **More passes over less data overfit.** 10% of the data for 6 epochs scores "
+            f"{fmt_pct(e6_acc)}, below the same rows for 2 epochs ({fmt_pct(f10_acc)}). "
+            f"Train loss ended at {fmt_sig(float(e6_run['final_train_loss']))} and dev loss at "
+            f"{fmt_sig(e6_dev)}, against {fmt_sig(float(f10_run['final_train_loss']))} and "
+            f"{fmt_sig(f10_dev)} after 2 epochs. The 30% run took about the same number of "
+            f"training steps ({fmt_count(int(f30_run['steps_completed']))} against "
+            f"{fmt_count(int(e6_run['steps_completed']))}) and scores {fmt_pct(f30_acc)}."
+        ),
+    ]
+    return "What the runs show:\n\n" + "\n".join(bullets)
+
+
+def _block_learning_curve(points: list[dict]) -> str:
+    headers = [
+        "Share",
+        "Training rows",
+        "Fine-tuned",
+        "TF-IDF + linear SVM",
+        "Difference",
+    ]
+    rows = []
+    for point in points:
+        tfidf_cell = (
+            f"{_acc_cell(point['tfidf_acc'], point['tfidf_ci'])}, "
+            f"C = {_fmt_c(point['chosen_c'])}"
+        )
+        rows.append(
+            [
+                point["label"],
+                fmt_count(point["rows"]),
+                _acc_cell(point["ft_acc"], point["ft_ci"]),
+                tfidf_cell,
+                _diff_cell(point["diff"]),
+            ]
+        )
+    return _md(headers, rows)
+
+
+def _block_facts_learning_curve(points: list[dict]) -> str:
+    gap05 = points[0]["ft_acc"] - points[0]["tfidf_acc"]
+    gap100 = points[-1]["ft_acc"] - points[-1]["tfidf_acc"]
+    gain = points[-1]["ft_acc"] - points[-2]["ft_acc"]
+    minutes = float(_train_run("frac10")["training_seconds"]) / 60.0
+    return "\n".join(
+        [
+            (
+                "- The fine-tuned model is ahead at every size, and the gap grows as the data "
+                f"shrinks: {_points_mag(gap05)} points at {fmt_count(points[0]['rows'])} records, "
+                f"{_points_mag(gap100)} points at {fmt_count(points[-1]['rows'])}."
+            ),
+            (
+                f"- With {fmt_count(points[1]['rows'])} labelled records and {minutes:.1f} minutes "
+                f"of training, the fine-tuned model scores {fmt_pct(points[1]['ft_acc'])}. "
+                f"TF-IDF trained on all {fmt_count(points[-1]['rows'])} scores "
+                f"{fmt_pct(points[-1]['tfidf_acc'])}."
+            ),
+            (
+                "- From 30% to 100% of the data the fine-tuned model gains "
+                f"{_points_mag(gain)} points in these runs, which is inside the noise. "
+                "More labelled data of the same kind is not the lever. The slices table points "
+                "at label disagreement and non-kernel CVEs instead."
+            ),
+        ]
+    )
+
+
+def _plot_learning_curve(points: list[dict]) -> None:
+    """Draw results/curves/learning_curve.png in the same plain style as loss.png."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    retrieval = float(_one_result("qwen35_4b_retrieval", "dev")["metrics"]["accuracy"])
+    zero = float(_one_result("qwen35_4b_zero_shot", "dev")["metrics"]["accuracy"])
+    fig, ax = plt.subplots(figsize=(10, 4))
+    xs = [point["rows"] for point in points]
+    ax.plot(xs, [point["ft_acc"] for point in points], marker="o", label="Fine-tuned")
+    ax.plot(
+        xs,
+        [point["tfidf_acc"] for point in points],
+        marker="o",
+        label="TF-IDF + linear SVM",
+    )
+    ax.axhline(retrieval, linestyle="--", linewidth=1, label="Retrieved examples")
+    ax.axhline(zero, linestyle="--", linewidth=1, label="Zero-shot")
+    ax.set_xscale("log")
+    ax.xaxis.set_major_locator(plt.FixedLocator(xs))
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda value, _pos: f"{int(round(value)):,}"))
+    ax.xaxis.set_minor_locator(plt.NullLocator())
+    ax.set_xlabel("Training rows")
+    ax.set_ylabel("Dev accuracy")
+    ax.set_title("Dev accuracy against training rows")
+    ax.legend(fontsize=8, loc="center left", bbox_to_anchor=(1.02, 0.5))
+    fig.tight_layout()
+    path = REPO_ROOT / "results" / "curves" / "learning_curve.png"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _redraw_learning_curve() -> None:
+    _plot_learning_curve(_learning_points())
+
+
 _README_BLOCKS = (
     "headline",
     "facts:coverage",
     "facts:data",
     "table:training",
     "table:ablations",
+    "facts:ablations",
+    "table:learning_curve",
+    "facts:learning_curve",
     "table:serving",
     "table:demo",
     "table:gate",
@@ -1942,12 +2284,16 @@ def _readme_blocks() -> dict[str, str]:
     stats = json.loads((REPO_ROOT / "data" / "processed" / "stats.json").read_text())
     _bench, _level = _bench_concurrency(32)
     view = _route_view(gate_cfg, routing)
+    curve = _learning_points()
     return {
         "headline": _block_headline(gate, gate_cfg, routing, view, _bench),
         "facts:coverage": _block_coverage(stats),
         "facts:data": _block_data(stats),
         "table:training": _block_training(gate_cfg),
         "table:ablations": _block_ablations(),
+        "facts:ablations": _block_facts_ablations(),
+        "table:learning_curve": _block_learning_curve(curve),
+        "facts:learning_curve": _block_facts_learning_curve(curve),
         "table:serving": _block_serving(_bench),
         "table:gate": _block_gate(gate),
         "table:main": _block_main(gate, gate_cfg),
@@ -1985,6 +2331,7 @@ def _fill_readme(text: str, blocks: dict[str, str]) -> str:
 def write_readme() -> int:
     _fix_cpu_routing_cost()
     _redraw_loss_from_csv()
+    _redraw_learning_curve()
     path = REPO_ROOT / "README.md"
     path.write_text(_fill_readme(path.read_text(), _readme_blocks()))
     print("[report] wrote README.md")

@@ -168,6 +168,8 @@ Eight one-seed runs, added after submission. Each changes one thing against the 
 
 The overrides live in configs/ablations/. A run whose name starts with ablation_ is refused on the test split.
 
+The same 5%, 10% and 30% samples are fit with TF-IDF + linear SVM (`python -m cve2cwe tfidf-curve`). C is chosen on dev from the baseline grid. The command has no test path. The full-data comparison uses the existing tfidf_svm run.
+
 ## 8. Inference and serving
 
 - The adapter is merged into the base weights and saved as a standalone bf16 checkpoint.
@@ -357,3 +359,7 @@ tests/          test_smoke.py  test_scorer.py  test_split.py  test_gate.py
 - 2026-11-24: The notebook fallback in section 11 was not built. The laptop demo works, so the fallback was not needed.
 - 2026-11-24: The README carries the DPO and GRPO paragraph promised in section 13. Neither method was run.
 - 2026-11-25: Added an Ablations section. Eight one-seed runs change one training choice at a time and are scored on dev only. The test set, the gate and the shipped model are unchanged. The 4-bit run is merged into the bf16 base before that dev score.
+- 2026-11-25: The ablation runs were made on a second H100 pod. The environment was rebuilt from the pinned requirement files. The pod root was /root/abl (POD_ROOT), not /workspace. A control run repeated the shipped recipe and seed. Dev loss is evaluated once more at the last step when that step is missing from the scheduled evals. Dev scoring used 16 concurrent requests, the same concurrency as the 24 Nov dev runs.
+- 2026-11-25: On both pods Unsloth reported that xformers is installed but cannot load with torch 2.14.1+cu130, so PyTorch attention was used.
+- 2026-11-25: The serve install needed the PyTorch cu130 index (https://download.pytorch.org/whl/cu130, with uv --index-strategy unsafe-best-match) because torch==2.10.0+cu130 is not on PyPI. The uv download cache at /root/.cache/uv (14 GB) was deleted to free disk after root free space fell to 6 GB during the first vLLM compile.
+- 2026-11-25: TF-IDF + linear SVM is fit on the same seeded 5%, 10% and 30% subsets (`python -m cve2cwe tfidf-curve`), dev only, with C chosen on dev from the baseline grid. The report prints the ablation findings and the learning curve only when the recorded numbers still support those sentences.

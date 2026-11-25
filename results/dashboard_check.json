@@ -1,5 +1,5 @@
 {
-  "source": "provider dashboards, read on 2026-11-24",
+  "source": "provider dashboards, read on 2026-11-24 and 2026-11-25",
   "runpod": {
     "read_utc": "2026-11-24T17:21Z",
     "loaded_usd": 80.00,
@@ -7,6 +7,33 @@
     "spend_rate_usd_per_hour": 4.418,
     "pod_uptime": "9h 5m"
   },
+  "runpod_balances": [
+    {
+      "read_utc": "2026-11-24T17:21Z",
+      "balance_usd": 39.83,
+      "note": ""
+    },
+    {
+      "read_utc": "2026-11-25T12:40Z",
+      "balance_usd": 33.08,
+      "note": "before the second session"
+    },
+    {
+      "read_utc": "2026-11-25T16:06Z",
+      "balance_usd": 18.49,
+      "note": "after the second pod was stopped"
+    }
+  ],
+  "second_pod": {
+    "name": "cve2cwe-migration",
+    "id": "llj0kmw2u4ovax",
+    "gpu": "H100 SXM",
+    "rate_usd_per_hour": 4.418,
+    "window": "2026-11-25 from about 12:45 UTC to 16:05 UTC",
+    "disk_usd_per_hour_when_stopped": 0.042,
+    "first_pod_deleted_on": "2026-11-25"
+  },
+  "claude_calls_on_2026_11_25": false,
   "anthropic_console": {
     "data_as_of_utc": "2026-11-24T16:44Z",
     "date": "2026-11-24",

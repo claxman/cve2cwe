@@ -1,0 +1,25 @@
+{
+  "chosen_c": 1.0,
+  "dev_scores_by_c": {
+    "0.25": 0.7934034070315331,
+    "0.5": 0.7970279086625589,
+    "1.0": 0.800289960130482
+  },
+  "finished_utc": "2026-11-25T17:43:37Z",
+  "fraction_seed": 1,
+  "git_commit": "6bc9b5860eedd798b6ea0375ede67823e01633fb",
+  "git_dirty": false,
+  "package_versions": {
+    "numpy": "2.5.5",
+    "pyyaml": "6.0.4",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1"
+  },
+  "random_state": 20261124,
+  "run_id": "20261125T174328Z-6bc9b58",
+  "split": "dev",
+  "started_utc": "2026-11-25T17:43:28Z",
+  "system": "ablation_tfidf_frac05",
+  "train_fraction": 0.05,
+  "train_row_count": 2115
+}

@@ -28,10 +28,13 @@ Should labelling a CVE with its CWE weakness type move from a frontier model to 
 
 **Next steps.**
 
-1. A learning curve: train on 10% and 30% of the data, to see how many labelled examples are needed before fine-tuning beats prompting.
-2. Non-kernel CVEs: more recent non-kernel training data, and a check of whether crediting a parent or child CWE changes the picture.
+1. Non-kernel CVEs: more recent non-kernel training data, and a check of whether crediting a parent or child CWE changes the picture.
+2. Label disagreement: the learning curve is flat from 30% of the data, so more labels of the same kind will not help. Use the CISA label as a second opinion where it exists, in training and in evaluation.
 3. Preference tuning (DPO) on the most frequent confusions, only if supervised fine-tuning stops improving.
-4. What production still needs: monitoring, drift alarms, threshold recalibration and a retraining schedule.
+4. A cheaper recipe: in single runs on dev, 4-bit training matched the shipped recipe and rank 4 was within half a point. Confirm them together on three seeds, through the same gate, before using them.
+5. What production still needs: monitoring, drift alarms, threshold recalibration and a retraining schedule.
+
+**Added on 2026-11-25.** Ablations on dev (training-set size, adapter rank, 4-bit training) are in their own section. They do not change the verdict. The gate result above comes from the runs of 2026-11-24.
 
 Everything below is the evidence. Every measured number in this file is generated from the run files by "python -m cve2cwe report". CI fails if this file is out of date.
 
@@ -82,6 +85,10 @@ Built agent-first: I own the scope, decisions and merges; coding agents wrote th
 | Results | [results/](results/) |
 | Acceptance bar | [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md), [configs/gate.yaml](configs/gate.yaml) |
 | Backlog labels | [outputs/backlog/](outputs/backlog/) |
+| Ablation overrides | [configs/ablations/](configs/ablations/) |
+| Ablation code | [ablations.py](src/cve2cwe/ablations.py) |
+| TF-IDF on the same subsets | `python -m cve2cwe tfidf-curve` |
+| Learning curve | [results/curves/learning_curve.png](results/curves/learning_curve.png) |
 
 Source: the official NVD JSON 2.0 feeds for 2021 to 2026. CVE descriptions are used under the CVE Terms of Use. CWE names are from MITRE.
 
@@ -112,7 +119,7 @@ Near-duplicate share of test against train: 1.6% at or above 0.80, 0.4% at or ab
 ## Fine-tuning
 
 - Base model: Qwen/Qwen3.5-4B, Apache 2.0, pinned to a commit hash.
-- LoRA rank 16 on full-precision (bf16) weights, not 4-bit. Unsloth's guide for this model family advises against 4-bit training, and an adapter trained on bf16 weights merges into the same weights it was trained on.
+- LoRA rank 16 on full-precision (bf16) weights, not 4-bit. Unsloth's guide for this model family advises against 4-bit training, and an adapter trained on bf16 weights merges into the same weights it was trained on. Both choices were tested afterwards, see Ablations.
 - The training text is the exact serving prompt followed by the label. Loss is on the label and the end token only. A run fails before step 1 if any example would be truncated.
 - Three seeds. The seed sets the adapter initialisation and the data order.
 - Two lengths were trained, 1 epoch and 2 epochs. The length with the higher mean dev accuracy was chosen before any test run.
@@ -138,7 +145,7 @@ Runs are tracked in Weights & Biases: https://wandb.ai/chaitanyalaxman118-chaita
 
 ## Ablations (dev only, added on 2026-11-25 after submission)
 
-These runs change one thing at a time against the shipped recipe. They are scored on dev only. The test set, the gate and the shipped model are unchanged. Each is one seed, so differences under about one point are noise.
+These runs change one thing at a time against the shipped recipe. They are scored on dev only. The test set, the gate and the shipped model are unchanged. Each is one seed.
 
 The runs were made on a second H100 pod, with the environment rebuilt from the pinned requirement files. The control row repeats the shipped recipe in that environment.
 
@@ -159,7 +166,37 @@ The runs were made on a second H100 pod, with the environment rebuilt from the p
 | base model zero-shot | reference |  |  |  |  |  | 67.3% (65.5% to 69.0%) | -21.5 points (-23.2 to -19.9) |
 <!-- END table:ablations -->
 
-FINDINGS_PLACEHOLDER
+<!-- BEGIN facts:ablations -->
+What the runs show:
+
+- **Noise first.** The control repeats the shipped recipe and seed on a different machine and scores 88.5%, against 88.8% for the shipped run. The three shipped seeds span 88.7% to 89.0%. A difference of half a point between two single runs is not a finding.
+- **Adapter rank makes little difference.** Rank 4, 16 and 64 score 88.3%, 88.5% and 88.5%. Rank 4 trains a quarter of the parameters of rank 16 and is 0.2 points below it, inside the noise. Rank 64 buys nothing.
+- **4-bit training lost nothing on this task.** The adapter was trained on 4-bit weights and then merged into the full-precision weights, which is how it would be served. It scores 88.9%. Peak training memory was 12.72 GiB against 17.63 GiB, and training took 19.9 minutes against 19.0. The Unsloth guide advises against 4-bit training for this model family. On this task and one seed, that caution did not show up.
+- **More passes over less data overfit.** 10% of the data for 6 epochs scores 85.5%, below the same rows for 2 epochs (87.1%). Train loss ended at 0.01836 and dev loss at 0.1306, against 0.09948 and 0.07741 after 2 epochs. The 30% run took about the same number of training steps (794 against 798) and scores 88.2%.
+<!-- END facts:ablations -->
+
+### How much labelled data each approach needs
+
+TF-IDF + linear SVM was trained on the same seeded subsets, with C chosen on dev at each size, as for the full-data baseline.
+
+<!-- BEGIN table:learning_curve -->
+| Share | Training rows | Fine-tuned | TF-IDF + linear SVM | Difference |
+|---|---|---|---|---|
+| 5% | 2,115 | 85.2% (83.9% to 86.5%) | 80.0% (78.5% to 81.6%), C = 1.0 | +5.2 points (+3.9 to +6.5) |
+| 10% | 4,229 | 87.1% (85.9% to 88.4%) | 83.0% (81.6% to 84.4%), C = 1.0 | +4.2 points (+3.0 to +5.3) |
+| 30% | 12,687 | 88.2% (87.0% to 89.5%) | 85.6% (84.3% to 87.0%), C = 0.5 | +2.6 points (+1.6 to +3.6) |
+| 100% | 42,291 | 88.5% (87.3% to 89.7%) | 86.7% (85.5% to 88.0%), C = 0.25 | +1.7 points (+0.7 to +2.8) |
+<!-- END table:learning_curve -->
+
+![Dev accuracy against training rows](results/curves/learning_curve.png)
+
+<!-- BEGIN facts:learning_curve -->
+- The fine-tuned model is ahead at every size, and the gap grows as the data shrinks: 5.2 points at 2,115 records, 1.7 points at 42,291.
+- With 4,229 labelled records and 2.8 minutes of training, the fine-tuned model scores 87.1%. TF-IDF trained on all 42,291 scores 86.7%.
+- From 30% to 100% of the data the fine-tuned model gains 0.3 points in these runs, which is inside the noise. More labelled data of the same kind is not the lever. The slices table points at label disagreement and non-kernel CVEs instead.
+<!-- END facts:learning_curve -->
+
+What this changes: nothing in the verdict. The shipped recipe sits on a plateau: rank, weight precision and the last 70% of the data each move dev accuracy by about half a point at most, which is the size of the run-to-run noise. A cheaper recipe (rank 4, 4-bit) looks possible and is listed under next steps.
 
 ## Inference
 
@@ -390,7 +427,7 @@ GPU stages
 ## Honest limits
 
 - One day of work on one task. It is a proof of concept with evidence, not a production system.
-- One fine-tuning recipe. Only the number of epochs was varied.
+- The ablations are single runs scored on dev only. They show how sensitive the recipe is, not a tuned optimum. Learning rate, target modules and the base model were not varied.
 - Claude models were run on the test set only, with prompts that were not tuned.
 - Batched serving changes a small share of answers. The gate numbers come from unbatched runs.
 - The GPU sat idle for much of the day while code was written. The spend table shows it.
@@ -399,7 +436,7 @@ GPU stages
 ## What was spent
 
 <!-- BEGIN table:spend -->
-As of 2026-11-24T16:31:36Z. The pod was still running.
+As of 2026-11-25T16:06Z. The second pod is stopped and bills $0.042 per hour for its disk. The first pod was deleted on 2026-11-25 after RunPod migrated its disk. The purpose table is the ledger cut at 2026-11-24T16:31:36Z.
 
 GPU H100 SXM 80 GB: 8.360 hours, $37.0. Share of billed hours with no recorded run: 68.2%.
 
@@ -419,11 +456,17 @@ GPU H100 SXM 80 GB: 8.360 hours, $37.0. Share of billed hours with no recorded r
 | Claude Sonnet 5.5, retrieved examples | $11.3 |
 | Claude Sonnet 5.5, zero-shot | $7.24 |
 
-Claude total $19.5. GPU plus Claude: $56.4.
+Claude total $19.5. GPU plus Claude: $81.0.
 
-Provider dashboards, read on 2026-11-24.
+Provider dashboards, read on 2026-11-24 and 2026-11-25.
 
 RunPod, read 2026-11-24T17:21Z: spent $40.17 (loaded $80.00 minus balance $39.83), next to $40.13 for uptime 9h 5m at $4.418 per hour.
+
+Loaded $80.00. Balance $39.83 at 2026-11-24T17:21Z, $33.08 at 2026-11-25T12:40Z, before the second session, and $18.49 at 2026-11-25T16:06Z, after the second pod was stopped. First pod $46.92, including its time after the ledger was cut and its disk charge while stopped. Second session $14.59. RunPod total $61.51.
+
+Second session: pod cve2cwe-migration (llj0kmw2u4ovax), one H100 SXM at $4.418 per hour, 2026-11-25 from about 12:45 UTC to 16:05 UTC. From the run files: training 1.733 hours, merging and dev runs 0.204 hours. The rest of $14.59 is waiting for the disk migration, building the environment, and idle time.
+
+No Claude API calls on 2026-11-25.
 
 Anthropic console for 2026-11-24, data as of 2026-11-24T16:44Z: Claude Sonnet 5.5 $20.48 next to $18.6 from the run files; Claude Haiku 5.5 $0.94 next to $0.929 from the run files.
 

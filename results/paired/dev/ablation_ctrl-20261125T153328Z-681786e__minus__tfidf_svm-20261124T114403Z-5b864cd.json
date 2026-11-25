@@ -1,0 +1,32 @@
+{
+  "a": {
+    "accuracy": 0.8847408481333816,
+    "run_id": "20261125T153328Z-681786e",
+    "system": "ablation_ctrl"
+  },
+  "b": {
+    "accuracy": 0.8673432403044581,
+    "run_id": "20261124T114403Z-5b864cd",
+    "system": "tfidf_svm"
+  },
+  "diff_accuracy": 0.017397607828923523,
+  "diff_accuracy_ci95": [
+    0.007249003262051468,
+    0.027908662558898123
+  ],
+  "finished_utc": "2026-11-25T17:44:46Z",
+  "git_commit": "6bc9b5860eedd798b6ea0375ede67823e01633fb",
+  "git_dirty": false,
+  "package_versions": {
+    "numpy": "2.5.5",
+    "pyyaml": "6.0.4",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1"
+  },
+  "scoring": {
+    "bootstrap_resamples": 10000,
+    "bootstrap_seed": 20261124,
+    "macro_f1_min_support": 20
+  },
+  "split": "dev"
+}
