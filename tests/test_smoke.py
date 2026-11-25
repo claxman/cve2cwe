@@ -54,6 +54,7 @@ def test_each_unbuilt_stage_reports_not_built() -> None:
     built = {
         "data",
         "baselines",
+        "tfidf-curve",
         "train",
         "merge",
         "llm-eval",

@@ -9,6 +9,7 @@ from pathlib import Path
 STAGES = (
     "data",
     "baselines",
+    "tfidf-curve",
     "llm-eval",
     "frontier",
     "train",
@@ -39,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         from cve2cwe import baselines
 
         return baselines.main(rest)
+    if stage == "tfidf-curve":
+        from cve2cwe.tfidf_curve import run as run_tfidf_curve
+
+        return run_tfidf_curve(rest)
     if stage == "frontier":
         from cve2cwe import frontier
 
